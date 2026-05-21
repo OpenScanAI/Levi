@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
+import { agentAnalyticsApi } from "../api/agent-analytics";
 import { activityApi } from "../api/activity";
 import { accessApi } from "../api/access";
 import { issuesApi } from "../api/issues";
@@ -15,7 +16,6 @@ import { queryKeys } from "../lib/queryKeys";
 import { MetricCard } from "../components/MetricCard";
 import { EmptyState } from "../components/EmptyState";
 import { StatusIcon } from "../components/StatusIcon";
-
 import { ActivityRow } from "../components/ActivityRow";
 import { Identity } from "../components/Identity";
 import { timeAgo } from "../lib/timeAgo";
@@ -58,6 +58,12 @@ export function Dashboard() {
     queryFn: () => dashboardApi.summary(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+
+  const { data: analytics } = useQuery({
+  queryKey: ["agent-analytics", selectedCompanyId],
+  queryFn: () => agentAnalyticsApi.summary(selectedCompanyId!),
+  enabled: !!selectedCompanyId,
+});
 
   const { data: activity } = useQuery({
     queryKey: [...queryKeys.activity(selectedCompanyId!), { limit: DASHBOARD_ACTIVITY_LIMIT }],
@@ -289,7 +295,20 @@ export function Dashboard() {
                 </span>
               }
             />
-          </div>
+            {analytics && (
+  <MetricCard
+    icon={Bot}
+    value={`${analytics.approvalRate ?? 0}%`}
+    label="Approval Rate"
+    description={
+      <span>
+        Error Rate: {analytics.errorRate ?? 0}%
+      </span>
+    }
+  />
+)}
+
+         </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title="Run Activity" subtitle="Last 14 days">

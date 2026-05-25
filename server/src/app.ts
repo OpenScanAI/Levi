@@ -10,6 +10,7 @@ import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
 import { healthRoutes } from "./routes/health.js";
+import { hermesRoutes } from "./routes/hermes.js";
 import { companyRoutes } from "./routes/companies.js";
 import { companySkillRoutes } from "./routes/company-skills.js";
 import { agentRoutes } from "./routes/agents.js";
@@ -294,6 +295,7 @@ export async function createApp(
     }),
   );
   app.use("/api", api);
+  app.use("/api", hermesRoutes());
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
   });

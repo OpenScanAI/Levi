@@ -9,6 +9,7 @@ import {
   buildInvocationEnvForLogs,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   materializePaperclipSkillCopy,
+  parseJsonLenient,
   refreshPaperclipWorkspaceEnvForExecution,
   renderPaperclipWakePrompt,
   runningProcesses,
@@ -977,5 +978,114 @@ describe("appendWithByteCap", () => {
     expect(output).not.toContain("\uFFFD");
     expect(Buffer.from(output, "utf8").toString("utf8")).toBe(output);
     expect(Buffer.byteLength(output, "utf8")).toBeLessThanOrEqual(7);
+  });
+});
+
+describe("parseJsonLenient", () => {
+  it("returns null for empty string", () => {
+    expect(parseJsonLenient("")).toBeNull();
+  });
+
+  it("parses plain JSON directly", () => {
+    expect(parseJsonLenient('{"type":"result","ok":true}')).toEqual({
+      type: "result",
+      ok: true,
+    });
+  });
+
+  it("extracts JSON from markdown code blocks", () => {
+    const wrapped = "Some text\n```json\n{\"type\":\"result\",\"value\":42}\n```\nMore text";
+    expect(parseJsonLenient(wrapped)).toEqual({
+      type: "result",
+      value: 42,
+    });
+  });
+
+  it("extracts JSON from plain markdown blocks without language tag", () => {
+    const wrapped = "```\n{\"type\":\"result\",\"value\":42}\n```";
+    expect(parseJsonLenient(wrapped)).toEqual({
+      type: "result",
+      value: 42,
+    });
+  });
+
+  it("finds JSON object embedded in mixed text when JSON is at end of string", () => {
+    // The progressive parser tries substrings from '{' to end; trailing text
+    // after the closing brace causes parse failure. JSON must extend to end.
+    const mixed = 'Progress: 50%\n{"type":"result","status":"done"}';
+    expect(parseJsonLenient(mixed)).toEqual({
+      type: "result",
+      status: "done",
+    });
+  });
+
+  it("finds JSON array when it starts the string", () => {
+    // Arrays are supported, but only when '[' appears before any '{' in the string.
+    const arrayFirst = "[{\"id\":1},{\"id\":2}]";
+    expect(parseJsonLenient(arrayFirst)).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("returns null when no JSON is present", () => {
+    expect(parseJsonLenient("Just plain text without any braces")).toBeNull();
+  });
+
+  it("returns null for malformed JSON that cannot be recovered", () => {
+    expect(parseJsonLenient("{ broken json ")).toBeNull();
+  });
+
+  it("prefers code-block extraction when direct parse fails", () => {
+    // The full string is not valid JSON (trailing backticks), so direct parse fails.
+    // Code-block extraction should then find the block contents.
+    const input = 'not json\n```\n{"type":"block"}\n```';
+    expect(parseJsonLenient(input)).toEqual({ type: "block" });
+  });
+});
+
+describe("runChildProcess EPIPE handling", () => {
+  it("does not crash when child closes stdin early (EPIPE)", async () => {
+    // Use `sh -c 'exit 0'` which immediately exits, closing stdin before parent can write
+    const logs: { stream: "stdout" | "stderr"; chunk: string }[] = [];
+    const result = await runChildProcess(
+      `epipe-test-${randomUUID()}`,
+      "sh",
+      ["-c", "exit 0"],
+      {
+        cwd: os.tmpdir(),
+        env: {},
+        timeoutSec: 5,
+        graceSec: 1,
+        stdin: "this should not crash",
+        onLog: async (stream, chunk) => {
+          logs.push({ stream, chunk });
+        },
+      },
+    );
+
+    // Process should exit cleanly (exit code 0) despite EPIPE on stdin write
+    expect(result.exitCode).toBe(0);
+    expect(result.signal).toBeNull();
+    expect(result.timedOut).toBe(false);
+  });
+
+  it("delivers stdin successfully when child reads it", async () => {
+    const logs: { stream: "stdout" | "stderr"; chunk: string }[] = [];
+    const result = await runChildProcess(
+      `stdin-echo-test-${randomUUID()}`,
+      "cat",
+      [],
+      {
+        cwd: os.tmpdir(),
+        env: {},
+        timeoutSec: 5,
+        graceSec: 1,
+        stdin: "hello from parent",
+        onLog: async (stream, chunk) => {
+          logs.push({ stream, chunk });
+        },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toBe("hello from parent");
   });
 });

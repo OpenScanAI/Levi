@@ -1593,6 +1593,20 @@ async function buildFeedbackTraceBundleFromRow(
         files.push(...adapter.files);
         rawAdapterTrace = adapter.raw;
         normalizedAdapterTrace = adapter.normalized;
+      } else if (run.adapterType === "hermes_local") {
+        // Hermes uses stdout-only tracing; no local session artifacts to collect.
+        normalizedAdapterTrace = sanitizeFeedbackValue(
+          {
+            adapterType: "hermes_local",
+            sessionId: run.sessionIdAfter ?? run.sessionIdBefore,
+            summary: stdoutText
+              ? { stdoutPreview: stdoutText.slice(0, 2000) }
+              : null,
+          },
+          state,
+          "bundle.normalizedAdapterTrace.hermes",
+          MAX_TRACE_FILE_CHARS,
+        ) as Record<string, unknown>;
       } else if (run.adapterType === "opencode_local") {
         const adapter = await buildOpenCodeTraceFiles({
           sessionId: run.sessionIdAfter ?? run.sessionIdBefore,

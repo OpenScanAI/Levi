@@ -489,7 +489,10 @@ const hermesLocalAdapter: ServerAdapterModule = {
   sessionCodec: hermesSessionCodec,
   listSkills: hermesListSkills,
   syncSkills: hermesSyncSkills,
-  models: hermesModels,
+  models: [
+    { id: "kimi-k2.5", label: "Kimi K2.5" },
+    ...hermesModels,
+  ],
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: false,
   requiresMaterializedRuntimeSkills: false,

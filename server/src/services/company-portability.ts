@@ -607,6 +607,11 @@ const ADAPTER_DEFAULT_RULES_BY_TYPE: Record<string, Array<{ path: string[]; valu
     { path: ["timeoutSec"], value: 0 },
     { path: ["graceSec"], value: 15 },
   ],
+  hermes_local: [
+    { path: ["timeoutSec"], value: 300 },
+    { path: ["graceSec"], value: 10 },
+    { path: ["persistSession"], value: true },
+  ],
   opencode_local: [
     { path: ["timeoutSec"], value: 0 },
     { path: ["graceSec"], value: 15 },

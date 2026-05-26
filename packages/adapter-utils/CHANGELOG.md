@@ -1,5 +1,12 @@
 # @paperclipai/adapter-utils
 
+## Unreleased
+
+### Patch Changes
+
+- Added `parseJsonLenient()` utility to extract JSON from mixed text, markdown code blocks, and interleaved output
+- Fixed EPIPE crash in `runChildProcess()`: stdin errors are now caught via event listener and callback-style write instead of try/catch
+
 ## 0.3.1
 
 ### Patch Changes

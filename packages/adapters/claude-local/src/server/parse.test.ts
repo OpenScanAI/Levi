@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractClaudeRetryNotBefore,
   isClaudeTransientUpstreamError,
+  parseClaudeStreamJson,
 } from "./parse.js";
 
 describe("isClaudeTransientUpstreamError", () => {
@@ -119,5 +120,93 @@ describe("extractClaudeRetryNotBefore", () => {
     expect(
       extractClaudeRetryNotBefore({ errorMessage: "Overloaded. Try again later." }, new Date()),
     ).toBeNull();
+  });
+});
+
+describe("parseClaudeStreamJson", () => {
+  it("parses normal line-delimited stream JSON", () => {
+    const stdout = [
+      '{"type":"system","subtype":"init","session_id":"sess-1"}',
+      '{"type":"assistant","session_id":"sess-1","message":{"content":[{"type":"text","text":"Hello"}]}}',
+      '{"type":"result","session_id":"sess-1","result":"Done","usage":{"input_tokens":10,"output_tokens":5},"total_cost_usd":0.001}',
+    ].join("\n");
+
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.sessionId).toBe("sess-1");
+    expect(parsed.resultJson).toEqual({
+      type: "result",
+      session_id: "sess-1",
+      result: "Done",
+      usage: { input_tokens: 10, output_tokens: 5 },
+      total_cost_usd: 0.001,
+    });
+    expect(parsed.usage).toEqual({
+      inputTokens: 10,
+      cachedInputTokens: 0,
+      outputTokens: 5,
+    });
+    expect(parsed.costUsd).toBe(0.001);
+    expect(parsed.summary).toBe("Done");
+  });
+
+  it("extracts result from markdown-wrapped JSON", () => {
+    const stdout = 'Some intro\n```json\n{"type":"result","session_id":"sess-2","result":"Wrapped","usage":{"input_tokens":1,"output_tokens":2},"total_cost_usd":0.0001}\n```\n';
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.sessionId).toBe("sess-2");
+    expect(parsed.resultJson).not.toBeNull();
+    expect(parsed.summary).toBe("Wrapped");
+  });
+
+  it("extracts result from mixed text with progress indicators", () => {
+    const stdout = 'Progress: 50%\n{"type":"result","session_id":"sess-3","result":"Mixed","usage":{"input_tokens":5,"output_tokens":5}}\nDone.';
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.sessionId).toBe("sess-3");
+    expect(parsed.resultJson).not.toBeNull();
+    expect(parsed.summary).toBe("Mixed");
+  });
+
+  it("extracts result using extractResultFromMixedOutput for interleaved text", () => {
+    const stdout = 'Loading...\n{"type":"system","subtype":"init","session_id":"sess-4"}\nThinking...\n{"type":"assistant","session_id":"sess-4","message":{"content":[{"type":"text","text":"Working"}]}}\nProgress: 75%\n{"type":"result","session_id":"sess-4","result":"Interleaved","usage":{"input_tokens":3,"output_tokens":4}}\nCleanup...';
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.sessionId).toBe("sess-4");
+    expect(parsed.resultJson).not.toBeNull();
+    expect(parsed.summary).toBe("Interleaved");
+  });
+
+  it("returns null resultJson when no result is found", () => {
+    const stdout = '{"type":"system","subtype":"init","session_id":"sess-5"}\nNo result here.';
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.sessionId).toBe("sess-5");
+    expect(parsed.resultJson).toBeNull();
+    expect(parsed.costUsd).toBeNull();
+  });
+
+  it("collects assistant text messages", () => {
+    const stdout = [
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"First"}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Second"}]}}',
+      '{"type":"result","result":"Final","usage":{}}',
+    ].join("\n");
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.summary).toBe("Final");
+  });
+
+  it("uses assistant texts as summary when result field is missing", () => {
+    const stdout = [
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"First paragraph"}]}}',
+      '{"type":"assistant","message":{"content":[{"type":"text","text":"Second paragraph"}]}}',
+      '{"type":"result","usage":{},"total_cost_usd":0}'
+    ].join("\n");
+    const parsed = parseClaudeStreamJson(stdout);
+    expect(parsed.summary).toBe("First paragraph\n\nSecond paragraph");
+  });
+
+  it("handles empty stdout gracefully", () => {
+    const parsed = parseClaudeStreamJson("");
+    expect(parsed.sessionId).toBeNull();
+    expect(parsed.resultJson).toBeNull();
+    expect(parsed.summary).toBe("");
+    expect(parsed.usage).toBeNull();
+    expect(parsed.costUsd).toBeNull();
   });
 });

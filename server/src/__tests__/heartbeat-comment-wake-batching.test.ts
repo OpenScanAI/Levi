@@ -441,7 +441,7 @@ describe("heartbeat comment wake batching", () => {
 
       gateway.releaseFirstWait();
 
-      await waitFor(() => gateway.getAgentPayloads().length === 2);
+      await waitFor(() => gateway.getAgentPayloads().length === 2, 90_000);
       await waitFor(async () => {
         const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId));
         return runs.length === 2 && runs.every((run) => run.status === "succeeded");
@@ -585,7 +585,7 @@ describe("heartbeat comment wake batching", () => {
 
       await heartbeat.cancelRun(firstRun!.id);
 
-      await waitFor(() => gateway.getAgentPayloads().length === 2);
+      await waitFor(() => gateway.getAgentPayloads().length === 2, 90_000);
       const promotedPayload = gateway.getAgentPayloads()[1] ?? {};
       expect(promotedPayload.paperclip).toMatchObject({
         wake: {

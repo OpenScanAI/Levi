@@ -44,6 +44,15 @@ vi.mock("../services/activity-log.js", () => ({
   logActivity: mockLogActivity,
 }));
 
+vi.mock("../memory/MemoryInjector.js", () => ({
+  injectMemories: vi.fn().mockResolvedValue({
+    contextBlock: "",
+    memories: [],
+    tokenCount: 0,
+    skipped: true,
+  }),
+}));
+
 // ---------------------------------------------------------------------------
 // Imports after mocks
 // ---------------------------------------------------------------------------
@@ -55,6 +64,7 @@ import {
 import type { Environment, EnvironmentLease, ExecutionWorkspace } from "@paperclipai/shared";
 import type { RealizedExecutionWorkspace } from "../services/workspace-runtime.ts";
 import type { EnvironmentRuntimeService } from "../services/environment-runtime.ts";
+import type { MemoryService } from "../memory/MemoryService.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -167,6 +177,12 @@ function makeRealizeInput(overrides: {
     persistedExecutionWorkspace: overrides.persistedExecutionWorkspace !== undefined
       ? overrides.persistedExecutionWorkspace
       : null,
+    memoryService: { enabled: false } as unknown as MemoryService,
+    agentId: "agent-1",
+    projectId: "project-1",
+    taskId: "test-task",
+    agentRole: "engineer",
+    memoryBudget: 2000,
   };
 }
 

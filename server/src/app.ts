@@ -40,9 +40,12 @@ import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
+import { memoryRoutes } from "./routes/memory.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
+import { createMemoryService, type MemoryService } from "./memory/MemoryService.js";
+import { createMemoryLifecycle } from "./memory/MemoryLifecycle.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createPluginJobScheduler } from "./services/plugin-job-scheduler.js";
@@ -111,6 +114,8 @@ export async function createApp(
     uiMode: UiMode;
     serverPort: number;
     storageService: StorageService;
+    memoryConfig?: { enabled: boolean; baseUrl?: string; autoStart?: boolean };
+    memoryService?: MemoryService;
     feedbackExportService?: {
       flushPendingFeedbackTraces(input?: {
         companyId?: string;
@@ -174,6 +179,8 @@ export async function createApp(
 
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = opts.pluginWorkerManager ?? createPluginWorkerManager();
+  const memoryService = opts.memoryService ?? createMemoryService(opts.memoryConfig ?? { enabled: false });
+  const memoryLifecycle = createMemoryLifecycle(memoryService);
 
   // Mount API routes
   const api = Router();
@@ -187,11 +194,11 @@ export async function createApp(
       companyDeletionEnabled: opts.companyDeletionEnabled,
     }),
   );
-  api.use("/companies", companyRoutes(db, opts.storageService));
+  api.use("/companies", companyRoutes(db, opts.storageService, { memoryLifecycle }));
   api.use(companySkillRoutes(db));
   api.use(agentRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(assetRoutes(db, opts.storageService));
-  api.use(projectRoutes(db));
+  api.use(projectRoutes(db, { memoryLifecycle }));
   api.use(issueRoutes(db, opts.storageService, {
     feedbackExportService: opts.feedbackExportService,
     pluginWorkerManager: workerManager,
@@ -211,6 +218,7 @@ export async function createApp(
   api.use(sidebarPreferenceRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
+  api.use(memoryRoutes({ db, memoryService }));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -438,6 +446,7 @@ export async function createApp(
     if (feedbackExportTimer) clearInterval(feedbackExportTimer);
     devWatcher?.close();
     viteHtmlRenderer?.dispose();
+    memoryService.shutdown();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
   });

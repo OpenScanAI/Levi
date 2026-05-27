@@ -46,6 +46,9 @@ import { logActivity } from "./activity-log.js";
 import { parseObject } from "../adapters/utils.js";
 import type { RealizedExecutionWorkspace } from "./workspace-runtime.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+import { injectMemories, type MemoryInjectionResult } from "../memory/MemoryInjector.js";
+import type { MemoryService } from "../memory/MemoryService.js";
+import { logger } from "../middleware/logger.js";
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -107,6 +110,10 @@ export interface EnvironmentRealizationResult {
   executionTarget: AdapterExecutionTarget | null;
   remoteExecution: AdapterRemoteExecutionSpec | null;
   persistedExecutionWorkspace: ExecutionWorkspace | null;
+  /** Environment variables injected by the orchestrator (e.g. memory context). */
+  injectedEnv: Record<string, string>;
+  /** Raw memory injection result, null when memory injection was not attempted. */
+  memoryInjection: MemoryInjectionResult | null;
 }
 
 export interface EnvironmentReleaseResult {
@@ -267,6 +274,12 @@ export function environmentRunOrchestrator(
     heartbeatRunId: string;
     agentId: string;
     persistedExecutionWorkspace: Pick<ExecutionWorkspace, "id" | "mode"> | null;
+    /** Task identifier or description used as the memory search query. */
+    taskId?: string;
+    /** Agent role used for visibility filtering in memory queries. */
+    agentRole?: string;
+    /** Max tokens to spend on memory context. Default: 2000 */
+    memoryBudget?: number;
   }): Promise<EnvironmentAcquisitionResult> {
     // Step 1: Resolve environment
     const environment = await resolveEnvironment({
@@ -342,6 +355,18 @@ export function environmentRunOrchestrator(
     executionWorkspace: RealizedExecutionWorkspace;
     effectiveExecutionWorkspaceMode: string | null;
     persistedExecutionWorkspace: ExecutionWorkspace | null;
+    /** Memory service instance. When provided (and enabled), memory injection runs after execution target resolution. */
+    memoryService?: MemoryService;
+    /** Agent ID used for scoping memory queries. */
+    agentId?: string;
+    /** Project ID used for scoping memory queries. */
+    projectId?: string;
+    /** Task identifier or description used as the memory search query. */
+    taskId?: string;
+    /** Agent role used for visibility filtering in memory queries. */
+    agentRole?: string;
+    /** Max tokens to spend on memory context. Default: 2000 */
+    memoryBudget?: number;
   }): Promise<EnvironmentRealizationResult> {
     const {
       environment,
@@ -494,12 +519,74 @@ export function environmentRunOrchestrator(
       );
     }
 
+    // Step 5: Inject Agent Memory Context
+    const injectedEnv: Record<string, string> = {};
+    let memoryInjection: MemoryInjectionResult | null = null;
+    if (input.memoryService && input.agentId) {
+      try {
+        memoryInjection = await injectMemories({
+          memoryService: input.memoryService,
+          companyId: companyId,
+          projectId: input.projectId ?? "",
+          agentId: input.agentId,
+          agentRole: input.agentRole ?? "agent",
+          taskDescription: input.taskId ?? heartbeatRunId,
+          goalAncestry: [],
+          memoryBudget: input.memoryBudget,
+        });
+
+        if (!memoryInjection.skipped && memoryInjection.contextBlock) {
+          injectedEnv.LEVI_MEMORY_CONTEXT = memoryInjection.contextBlock;
+          logger.info(
+            {
+              companyId,
+              agentId: input.agentId,
+              heartbeatRunId,
+              tokenCount: memoryInjection.tokenCount,
+              memoryCount: memoryInjection.memories.length,
+            },
+            "[MemoryInjector] Injected agent memory context into environment",
+          );
+        }
+      } catch (err) {
+        // Memory injection is best-effort; failures must not block the run.
+        logger.warn({ err, companyId, agentId: input.agentId, heartbeatRunId }, "[MemoryInjector] Failed to inject memory context");
+      }
+    }
+
+    // Step 6: Merge injected env into execution target for adapter consumption
+    if (Object.keys(injectedEnv).length > 0 && executionTarget) {
+      if (executionTarget.kind === "remote") {
+        if (executionTarget.transport === "ssh") {
+          executionTarget = {
+            ...executionTarget,
+            spec: {
+              ...executionTarget.spec,
+              ...injectedEnv,
+            } as typeof executionTarget.spec,
+          };
+        } else if (executionTarget.transport === "sandbox") {
+          executionTarget = {
+            ...executionTarget,
+            ...injectedEnv,
+          };
+        }
+      } else if (executionTarget.kind === "local") {
+        executionTarget = {
+          ...executionTarget,
+          ...injectedEnv,
+        };
+      }
+    }
+
     return {
       lease,
       workspaceRealization,
       executionTarget,
       remoteExecution: adapterExecutionTargetToRemoteSpec(executionTarget),
       persistedExecutionWorkspace,
+      injectedEnv,
+      memoryInjection,
     };
   }
 

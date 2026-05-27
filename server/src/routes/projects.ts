@@ -34,17 +34,19 @@ import { appendWithCap } from "../adapters/utils.js";
 import { assertEnvironmentSelectionForCompany } from "./environment-selection.js";
 import { environmentService } from "../services/environments.js";
 import { secretService } from "../services/secrets.js";
+import type { MemoryLifecycle } from "../memory/MemoryLifecycle.js";
 
 const WORKSPACE_CONTROL_OUTPUT_MAX_CHARS = 256 * 1024;
 const SHARED_WORKSPACE_STOP_AND_RESTART_ACTIONS = new Set(["stop", "restart"]);
 
-export function projectRoutes(db: Db) {
+export function projectRoutes(db: Db, opts?: { memoryLifecycle?: MemoryLifecycle }) {
   const router = Router();
   const svc = projectService(db);
   const secretsSvc = secretService(db);
   const workspaceOperations = workspaceOperationService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
   const environmentsSvc = environmentService(db);
+  const memoryLifecycle = opts?.memoryLifecycle;
 
   async function assertProjectEnvironmentSelection(companyId: string, environmentId: string | null | undefined) {
     if (environmentId === undefined || environmentId === null) return;
@@ -665,6 +667,13 @@ export function projectRoutes(db: Db) {
     }
 
     const actor = getActorInfo(req);
+    if (memoryLifecycle) {
+      await memoryLifecycle.onProjectDeleted({
+        companyId: project.companyId,
+        projectId: project.id,
+        actorId: actor.actorId,
+      });
+    }
     await logActivity(db, {
       companyId: project.companyId,
       actorType: actor.actorType,

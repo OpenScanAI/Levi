@@ -63,7 +63,7 @@ function readRememberedInstanceSettingsPath(): string {
 
 export function Layout() {
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
-  const { openNewIssue, openOnboarding } = useDialogActions();
+  const { openNewIssue, openOnboarding, closeOnboarding } = useDialogActions();
   const { togglePanelVisible } = usePanel();
   const {
     companies,
@@ -148,6 +148,13 @@ export function Layout() {
       openOnboarding();
     }
   }, [companies, companiesLoading, openOnboarding, health?.deploymentMode]);
+
+  // Close onboarding dialog when companies load after initial empty state
+  useEffect(() => {
+    if (!companiesLoading && companies.length > 0 && onboardingTriggered.current) {
+      closeOnboarding();
+    }
+  }, [companies, companiesLoading, closeOnboarding]);
 
   useEffect(() => {
     if (!companyPrefix || companiesLoading || companies.length === 0) return;

@@ -109,6 +109,69 @@ export function workProductService(db: Db) {
       return row ? toIssueWorkProduct(row) : null;
     },
 
+    upsertByRuntimeServiceId: async (
+      issueId: string,
+      companyId: string,
+      runtimeServiceId: string,
+      data: Omit<typeof issueWorkProducts.$inferInsert, "issueId" | "companyId" | "runtimeServiceId">,
+    ) => {
+      const existing = await db
+        .select()
+        .from(issueWorkProducts)
+        .where(
+          and(
+            eq(issueWorkProducts.companyId, companyId),
+            eq(issueWorkProducts.issueId, issueId),
+            eq(issueWorkProducts.runtimeServiceId, runtimeServiceId),
+          ),
+        )
+        .then((rows) => rows[0] ?? null);
+
+      if (existing) {
+        const row = await db
+          .update(issueWorkProducts)
+          .set({ ...data, updatedAt: new Date() })
+          .where(eq(issueWorkProducts.id, existing.id))
+          .returning()
+          .then((rows) => rows[0] ?? null);
+        return row ? toIssueWorkProduct(row) : null;
+      }
+
+      return await workProductService(db).createForIssue(issueId, companyId, {
+        ...data,
+        runtimeServiceId,
+      });
+    },
+
+    updateByRuntimeServiceId: async (
+      issueId: string,
+      companyId: string,
+      runtimeServiceId: string,
+      patch: Partial<typeof issueWorkProducts.$inferInsert>,
+    ) => {
+      const existing = await db
+        .select()
+        .from(issueWorkProducts)
+        .where(
+          and(
+            eq(issueWorkProducts.companyId, companyId),
+            eq(issueWorkProducts.issueId, issueId),
+            eq(issueWorkProducts.runtimeServiceId, runtimeServiceId),
+          ),
+        )
+        .then((rows) => rows[0] ?? null);
+
+      if (!existing) return null;
+
+      const row = await db
+        .update(issueWorkProducts)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(issueWorkProducts.id, existing.id))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return row ? toIssueWorkProduct(row) : null;
+    },
+
     remove: async (id: string) => {
       const row = await db
         .delete(issueWorkProducts)

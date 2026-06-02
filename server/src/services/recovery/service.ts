@@ -2363,7 +2363,17 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       issueIds: [] as string[],
     };
 
-    for (const issue of candidates) {
+    // Cap the number of issues we process per reconciliation pass to prevent storms
+    const maxReconcileIssues = 10;
+    const limitedCandidates = candidates.slice(0, maxReconcileIssues);
+    if (candidates.length > maxReconcileIssues) {
+      logger.warn(
+        { totalCandidates: candidates.length, processed: maxReconcileIssues },
+        "reconcileStrandedAssignedIssues: capped to prevent storm",
+      );
+    }
+
+    for (const issue of limitedCandidates) {
       const agentId = issue.assigneeAgentId;
       if (!agentId) {
         result.skipped += 1;
@@ -2372,6 +2382,29 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
 
       const agent = await getAgent(agentId);
       if (!agent || agent.companyId !== issue.companyId || !isAgentInvokable(agent)) {
+        result.skipped += 1;
+        continue;
+      }
+
+      // Skip agents with high recent failure rates to prevent recurring inbox storms
+      const recentFailureCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentFailures = await db
+        .select({ count: sql<number>`count(${heartbeatRuns.id})` })
+        .from(heartbeatRuns)
+        .where(
+          and(
+            eq(heartbeatRuns.agentId, agentId),
+            inArray(heartbeatRuns.status, ["failed", "timed_out"]),
+            gt(heartbeatRuns.createdAt, recentFailureCutoff),
+          ),
+        )
+        .then((rows) => rows[0]?.count ?? 0);
+
+      if (recentFailures >= 5) {
+        logger.warn(
+          { agentId, agentName: agent.name, issueId: issue.id, recentFailures },
+          "reconcileStrandedAssignedIssues: skipping agent with high recent failure rate",
+        );
         result.skipped += 1;
         continue;
       }

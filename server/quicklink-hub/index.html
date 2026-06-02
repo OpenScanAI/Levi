@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuickLink Hub</title>
+<style>
+  :root {
+    --bg: #0b0f19;
+    --bg-elevated: #111827;
+    --bg-card: #1a2236;
+    --bg-hover: #232d45;
+    --border: #2a3650;
+    --text-primary: #e5e7eb;
+    --text-secondary: #9ca3af;
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 24px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-elevated);
+  }
+  header h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent); }
+  .search-bar {
+    padding: 24px 32px 0;
+    max-width: 1100px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .search-bar input {
+    width: 100%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 14px 20px;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-bar input:focus { border-color: var(--accent); }
+  .search-bar input::placeholder { color: var(--text-secondary); }
+
+  main { flex: 1; padding: 24px 32px; max-width: 1100px; width: 100%; margin: 0 auto; }
+
+  .input-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .input-row input, .input-row select {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .input-row input:focus, .input-row select:focus { border-color: var(--accent); }
+  .input-row input { flex: 1; min-width: 200px; }
+  .input-row select { min-width: 160px; }
+  .btn {
+    padding: 12px 22px;
+    border-radius: var(--radius);
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .category-section {
+    margin-bottom: 28px;
+  }
+  .category-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .category-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .category-header .count {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .link-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+  .link-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+  }
+  .link-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+  }
+  .link-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; font-weight: 700; color: #fff;
+    flex-shrink: 0;
+  }
+  .link-body { flex: 1; min-width: 0; }
+  .link-title {
+    font-weight: 600; font-size: 0.95rem;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .link-url {
+    font-size: 0.8rem; color: var(--text-secondary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-top: 4px;
+  }
+  .link-actions {
+    display: flex; gap: 6px; flex-shrink: 0; margin-top: 2px;
+  }
+  .link-actions button {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-secondary); padding: 5px 10px;
+    border-radius: 8px; cursor: pointer; font-size: 0.75rem;
+  }
+  .link-actions button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .empty { text-align: center; padding: 50px 20px; color: var(--text-secondary); }
+  .empty svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.4; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; width: 90%; max-width: 460px; box-shadow: var(--shadow);
+  }
+  .modal h3 { margin-bottom: 16px; }
+  .modal .field { margin-bottom: 14px; }
+  .modal label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .modal input, .modal select {
+    width: 100%; background: var(--bg-elevated); border: 1px solid var(--border);
+    color: var(--text-primary); padding: 10px 12px; border-radius: 10px; font-size: 1rem;
+  }
+  .modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+  @media (max-width: 640px) {
+    header { flex-direction: column; gap: 12px; align-items: flex-start; }
+    main { padding: 18px; }
+    .input-row input { min-width: 100%; }
+    .link-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>QuickLink <span>Hub</span></h1>
+  <button class="btn btn-primary" onclick="openAddModal()">+ Add Link</button>
+</header>
+
+<div class="search-bar">
+  <input type="text" id="searchInput" placeholder="Search links..." oninput="render()" />
+</div>
+
+<main id="mainContent">
+  <div class="empty" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+    <p>No links yet. Add your first bookmark above.</p>
+  </div>
+</main>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="linkModal">
+  <div class="modal">
+    <h3 id="modalTitle">Add Link</h3>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="linkTitle" placeholder="e.g. GitHub" />
+    </div>
+    <div class="field">
+      <label>URL</label>
+      <input type="url" id="linkUrl" placeholder="https://..." />
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <input type="text" id="linkCategory" placeholder="e.g. Development" list="categoryList" />
+      <datalist id="categoryList"></datalist>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLink()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- State ---------- */
+let links = loadLinks();
+let editingId = null;
+
+/* ---------- Persistence ---------- */
+function loadLinks() {
+  try { return JSON.parse(localStorage.getItem('quicklink_links')) || []; }
+  catch { return []; }
+}
+function saveLinks() {
+  localStorage.setItem('quicklink_links', JSON.stringify(links));
+  render();
+}
+
+/* ---------- CRUD ---------- */
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add Link';
+  document.getElementById('linkTitle').value = '';
+  document.getElementById('linkUrl').value = '';
+  document.getElementById('linkCategory').value = '';
+  updateCategoryList();
+  document.getElementById('linkModal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const link = links.find(l => l.id === id);
+  if (!link) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Link';
+  document.getElementById('linkTitle').value = link.title;
+  document.getElementById('linkUrl').value = link.url;
+  document.getElementById('linkCategory').value = link.category;
+  updateCategoryList();
+  document.getElementById('linkModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('linkModal').classList.remove('open');
+  editingId = null;
+}
+
+function saveLink() {
+  const title = document.getElementById('linkTitle').value.trim();
+  let url = document.getElementById('linkUrl').value.trim();
+  const category = document.getElementById('linkCategory').value.trim() || 'Uncategorized';
+
+  if (!title || !url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  if (editingId) {
+    const link = links.find(l => l.id === editingId);
+    if (link) {
+      link.title = title;
+      link.url = url;
+      link.category = category;
+    }
+  } else {
+    links.push({
+      id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
+      title,
+      url,
+      category,
+      createdAt: Date.now()
+    });
+  }
+  saveLinks();
+  closeModal();
+}
+
+function deleteLink(id) {
+  links = links.filter(l => l.id !== id);
+  saveLinks();
+}
+
+function updateCategoryList() {
+  const categories = [...new Set(links.map(l => l.category))];
+  const datalist = document.getElementById('categoryList');
+  datalist.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
+}
+
+/* ---------- Rendering ---------- */
+function render() {
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+  const filtered = links.filter(l =>
+    l.title.toLowerCase().includes(search) ||
+    l.url.toLowerCase().includes(search) ||
+    l.category.toLowerCase().includes(search)
+  );
+
+  const main = document.getElementById('mainContent');
+  const empty = document.getElementById('emptyState');
+
+  if (filtered.length === 0) {
+    main.innerHTML = '';
+    main.appendChild(empty);
+    empty.style.display = '';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  // Group by category
+  const groups = {};
+  for (const link of filtered) {
+    const cat = link.category || 'Uncategorized';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(link);
+  }
+
+  // Sort categories alphabetically
+  const sortedCats = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+  main.innerHTML = '';
+  for (const cat of sortedCats) {
+    const section = document.createElement('div');
+    section.className = 'category-section';
+    section.innerHTML = `
+      <div class="category-header">
+        <h2>${escapeHtml(cat)}</h2>
+        <span class="count">${groups[cat].length}</span>
+      </div>
+      <div class="link-grid">
+        ${groups[cat].map(link => `
+          <div class="link-card" onclick="window.open('${escapeHtml(link.url)}', '_blank')">
+            <div class="link-icon">${escapeHtml(link.title.charAt(0).toUpperCase())}</div>
+            <div class="link-body">
+              <div class="link-title">${escapeHtml(link.title)}</div>
+              <div class="link-url">${escapeHtml(link.url)}</div>
+            </div>
+            <div class="link-actions" onclick="event.stopPropagation()">
+              <button onclick="openEditModal('${link.id}')">Edit</button>
+              <button onclick="deleteLink('${link.id}')">Delete</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    main.appendChild(section);
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- Init ---------- */
+render();
+</script>
+</body>
+</html>

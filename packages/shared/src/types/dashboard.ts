@@ -6,6 +6,14 @@ export interface DashboardRunActivityDay {
   total: number;
 }
 
+export interface DashboardRetryActivityDay {
+  date: string;
+  retried: number;
+  recovered: number;
+  failedAfterRetries: number;
+  exhausted: number;
+}
+
 export interface DashboardSummary {
   companyId: string;
   agents: {
@@ -33,4 +41,19 @@ export interface DashboardSummary {
     pausedProjects: number;
   };
   runActivity: DashboardRunActivityDay[];
+  retries: {
+    totalRetries: number;
+    successfulRetries: number;
+    failedRetries: number;
+    exhaustedRetries: number;
+    recoveryRate: number;
+    retryActivity: DashboardRetryActivityDay[];
+    topAgents: Array<{
+      agentId: string;
+      agentName: string;
+      retryCount: number;
+      successCount: number;
+      failureCount: number;
+    }>;
+  };
 }

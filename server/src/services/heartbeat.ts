@@ -168,7 +168,9 @@ import { environmentService } from "./environments.js";
 import { environmentRuntimeService } from "./environment-runtime.js";
 import { environmentRunOrchestrator } from "./environment-run-orchestrator.js";
 import { isUnsafeSessionWorkspaceCwd } from "./session-workspace-cwd.js";
+import { retryPolicyService, MAX_RETRY_ATTEMPTS } from "./retry-policy.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+import { workProductService } from "./work-products.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const MAX_PERSISTED_LOG_CHUNK_CHARS = 64 * 1024;
@@ -1090,6 +1092,51 @@ export function prioritizeProjectWorkspaceCandidatesForRun<T extends ProjectWork
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+async function createWorkProductsForRuntimeServices(
+  db: Db,
+  issueId: string | null,
+  companyId: string,
+  runId: string,
+  services: Array<{ id: string; serviceName: string; url: string | null; port: number | null; command: string | null; cwd: string | null; provider: string; healthStatus: string }>,
+  onLog?: (stream: "stdout" | "stderr", chunk: string) => Promise<void>,
+) {
+  if (!issueId) return;
+  const wpSvc = workProductService(db);
+  for (const service of services) {
+    if (!service.url) continue;
+    try {
+      await wpSvc.upsertByRuntimeServiceId(
+        issueId,
+        companyId,
+        service.id,
+        {
+          type: service.provider === "adapter_managed" ? "runtime_service" : "preview_url",
+          provider: "paperclip",
+          title: service.serviceName || "Runtime Service",
+          url: service.url,
+          status: "active",
+          reviewState: "none",
+          isPrimary: false,
+          healthStatus: service.healthStatus === "healthy" ? "healthy" : "unknown",
+          executionWorkspaceId: null,
+          createdByRunId: runId,
+          metadata: {
+            port: service.port,
+            command: service.command,
+            cwd: service.cwd,
+            provider: service.provider,
+          },
+        },
+      );
+    } catch (err) {
+      await onLog?.(
+        "stderr",
+        `[paperclip] Failed to create work product for runtime service ${service.serviceName}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+  }
 }
 
 function readModelProfileKey(value: unknown): ModelProfileKey | null {
@@ -6697,7 +6744,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .where(eq(heartbeatRuns.status, "queued"));
 
     const agentIds = [...new Set(queuedRuns.map((r) => r.agentId))];
-    for (const agentId of agentIds) {
+    // Limit startup resume to prevent agent storms
+    const maxResumeAgents = 5;
+    const limitedAgentIds = agentIds.slice(0, maxResumeAgents);
+    if (agentIds.length > maxResumeAgents) {
+      logger.warn(
+        { totalQueuedAgents: agentIds.length, resumed: maxResumeAgents },
+        "resumeQueuedRuns: capped startup resume to prevent agent storm",
+      );
+    }
+    for (const agentId of limitedAgentIds) {
       await startNextQueuedRunForAgent(agentId);
     }
   }
@@ -7729,6 +7785,23 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             updatedAt: new Date(),
           })
           .where(eq(heartbeatRuns.id, run.id));
+        await createWorkProductsForRuntimeServices(
+          db,
+          issueId,
+          agent.companyId,
+          run.id,
+          runtimeServices.map((s) => ({
+            id: s.id,
+            serviceName: s.serviceName,
+            url: s.url,
+            port: s.port,
+            command: s.command,
+            cwd: s.cwd,
+            provider: s.provider,
+            healthStatus: s.healthStatus,
+          })),
+          onLog,
+        );
       }
       if (issueId && (executionWorkspace.created || runtimeServices.some((service) => !service.reused))) {
         try {
@@ -7836,6 +7909,23 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             updatedAt: new Date(),
           })
           .where(eq(heartbeatRuns.id, run.id));
+        await createWorkProductsForRuntimeServices(
+          db,
+          issueId,
+          agent.companyId,
+          run.id,
+          adapterManagedRuntimeServices.map((s) => ({
+            id: s.id,
+            serviceName: s.serviceName,
+            url: s.url,
+            port: s.port,
+            command: s.command,
+            cwd: s.cwd,
+            provider: s.provider,
+            healthStatus: s.healthStatus,
+          })),
+          onLog,
+        );
         if (issueId) {
           try {
             await issuesSvc.addComment(
@@ -8038,6 +8128,32 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           }
         } else if (outcome === "failed" && readTransientRecoveryContractFromRun(livenessRun)) {
           await scheduleBoundedRetryForRun(livenessRun, agent);
+        } else if (outcome === "failed" || outcome === "timed_out") {
+          // Automatic retry for transient failures (timeouts, API errors, runtime startup failures)
+          const retryPolicy = retryPolicyService(db);
+          const decision = retryPolicy.shouldRetry(livenessRun);
+          retryPolicy.logRetryDecision(livenessRun.id, agent.id, decision, livenessRun.errorCode);
+
+          if (decision.shouldRetry) {
+            await scheduleBoundedRetryForRun(livenessRun, agent, {
+              retryReason: "transient_failure",
+              wakeReason: "transient_failure_retry",
+              maxAttempts: MAX_RETRY_ATTEMPTS,
+              delayMs: decision.delayMs,
+            });
+            await appendRunEvent(livenessRun, await nextRunEventSeq(livenessRun.id), {
+              eventType: "lifecycle",
+              stream: "system",
+              level: "info",
+              message: `Automatic retry scheduled: attempt ${decision.attempt}/${MAX_RETRY_ATTEMPTS} in ${Math.round(decision.delayMs / 1000)}s`,
+              payload: {
+                retryAttempt: decision.attempt,
+                maxAttempts: MAX_RETRY_ATTEMPTS,
+                delayMs: decision.delayMs,
+                errorCode: livenessRun.errorCode,
+              },
+            });
+          }
         }
         const issueCommentPolicyResult = await finalizeIssueCommentPolicy(livenessRun, agent);
         await releaseIssueExecutionAndPromote(livenessRun);
@@ -8773,6 +8889,31 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       agent.status === "pending_approval"
     ) {
       throw conflict("Agent is not invokable in its current state", { status: agent.status });
+    }
+
+    // Failure-rate guard: skip agents with too many recent failures to prevent inbox storms
+    if (source === "timer" || source === "automation") {
+      const recentFailureCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recentFailures = await db
+        .select({ count: sql<number>`count(${heartbeatRuns.id})` })
+        .from(heartbeatRuns)
+        .where(
+          and(
+            eq(heartbeatRuns.agentId, agentId),
+            inArray(heartbeatRuns.status, ["failed", "timed_out"]),
+            gt(heartbeatRuns.createdAt, recentFailureCutoff),
+          ),
+        )
+        .then((rows) => rows[0]?.count ?? 0);
+
+      if (recentFailures >= 5) {
+        await writeSkippedRequest("agent_failure_rate_guard");
+        logger.warn(
+          { agentId, agentName: agent.name, recentFailures },
+          "enqueueWakeup: skipped due to high recent failure rate",
+        );
+        return null;
+      }
     }
 
     const policy = parseHeartbeatPolicy(agent);
@@ -9886,6 +10027,13 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
+
+        // Prevent catch-up storms after long downtime: cap elapsed time at 2x interval
+        const maxCatchUpMs = policy.intervalSec * 1000 * 2;
+        if (elapsedMs > maxCatchUpMs) {
+          skipped += 1;
+          continue;
+        }
 
         const run = await enqueueWakeup(agent.id, {
           source: "timer",

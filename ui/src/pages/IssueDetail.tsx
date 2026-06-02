@@ -75,6 +75,7 @@ import { IssueMonitorActivityCard } from "../components/IssueMonitorActivityCard
 import { IssueScheduledRetryCard } from "../components/IssueScheduledRetryCard";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueRunLedger } from "../components/IssueRunLedger";
+import { IssueRuntimeServicesPanel } from "../components/IssueRuntimeServicesPanel";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ImageGalleryModal } from "../components/ImageGalleryModal";
@@ -3871,6 +3872,11 @@ export function IssueDetail() {
         initialIndex={galleryIndex}
         open={galleryOpen}
         onOpenChange={setGalleryOpen}
+      />
+
+      <IssueRuntimeServicesPanel
+        issueId={issue.id}
+        hasLiveRuns={hasLiveRuns}
       />
 
       <IssueWorkspaceCard

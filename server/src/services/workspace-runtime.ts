@@ -16,6 +16,7 @@ import {
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { asNumber, asString, parseObject, renderTemplate } from "../adapters/utils.js";
 import { resolveHomeAwarePath } from "../home-paths.js";
+import { workProductService } from "./work-products.js";
 import {
   createLocalServiceKey,
   findLocalServiceRegistryRecordByRuntimeServiceId,
@@ -29,6 +30,8 @@ import {
 import type { WorkspaceOperationRecorder } from "./workspace-operations.js";
 import { readExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { readProjectWorkspaceRuntimeConfig } from "./project-workspace-runtime-config.js";
+
+const RUNTIME_SERVICE_HEALTH_CHECK_INTERVAL_MS = 30_000;
 
 export function resolveShell(): string {
   const fallback = process.platform === "win32" ? "sh" : "/bin/sh";
@@ -2255,6 +2258,11 @@ function registerRuntimeService(db: Db | undefined, record: RuntimeServiceRecord
     runtimeServicesByReuseKey.set(record.reuseKey, record.id);
   }
 
+  // Start background health validation loop for this service
+  if (record.url && record.status === "running") {
+    void startRuntimeServiceHealthLoop(record);
+  }
+
   record.child?.on("exit", (code, signal) => {
     const current = runtimeServicesById.get(record.id);
     if (!current) return;
@@ -2270,6 +2278,30 @@ function registerRuntimeService(db: Db | undefined, record: RuntimeServiceRecord
     void removeLocalServiceRegistryRecord(current.serviceKey);
     void persistRuntimeServiceRecord(db, current);
   });
+}
+
+async function startRuntimeServiceHealthLoop(record: RuntimeServiceRecord) {
+  while (runtimeServicesById.has(record.id) && record.status === "running" && record.url) {
+    await delay(RUNTIME_SERVICE_HEALTH_CHECK_INTERVAL_MS);
+    const current = runtimeServicesById.get(record.id);
+    if (!current || current.status !== "running" || !current.url) break;
+
+    const healthy = await isRuntimeServiceUrlHealthy(current.url);
+    const newHealthStatus = healthy ? "healthy" : "unhealthy";
+    if (current.healthStatus !== newHealthStatus) {
+      current.healthStatus = newHealthStatus;
+      void persistRuntimeServiceRecord(current.db, current);
+
+      // Sync health status to linked work product if issue is known
+      if (current.issueId && current.db) {
+        void workProductService(current.db)
+          .updateByRuntimeServiceId(current.issueId, current.companyId, current.id, {
+            healthStatus: newHealthStatus,
+          })
+          .catch(() => undefined);
+      }
+    }
+  }
 }
 
 function readRuntimeServiceEntries(config: Record<string, unknown>) {

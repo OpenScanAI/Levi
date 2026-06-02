@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import { agents, approvals, companies, costEvents, heartbeatRuns, issues } from "@paperclipai/db";
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
+import { retryPolicyService } from "./retry-policy.js";
 
 const DASHBOARD_RUN_ACTIVITY_DAYS = 14;
 
@@ -134,6 +135,10 @@ export function dashboardService(db: Db) {
           : 0;
       const budgetOverview = await budgets.overview(companyId);
 
+      // Fetch retry metrics
+      const retrySvc = retryPolicyService(db);
+      const retryMetrics = await retrySvc.getRetryMetrics(companyId, 24);
+
       return {
         companyId,
         agents: {
@@ -156,6 +161,15 @@ export function dashboardService(db: Db) {
           pausedProjects: budgetOverview.pausedProjectCount,
         },
         runActivity: Array.from(runActivity.values()),
+        retries: {
+          totalRetries: retryMetrics.totalRetries,
+          successfulRetries: retryMetrics.successfulRetries,
+          failedRetries: retryMetrics.failedRetries,
+          exhaustedRetries: retryMetrics.exhaustedRetries,
+          recoveryRate: retryMetrics.recoveryRate,
+          retryActivity: retryMetrics.retryActivity,
+          topAgents: retryMetrics.retriedAgents.slice(0, 5),
+        },
       };
     },
   };

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenScanAI — AI-Powered Automation Platform</title>
+<meta name="description" content="OpenScanAI brings automation, agents, and a control dashboard together in one system.">
+<style>
+  :root {
+    --bg-base: #0B0C0F;
+    --bg-surface: #111318;
+    --bg-elevated: #171A21;
+    --bg-card: #1A1D26;
+    --bg-hover: #1E2230;
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-medium: rgba(255,255,255,0.10);
+    --text-primary: #F0F1F5;
+    --text-secondary: #9BA3B4;
+    --text-muted: #5E6678;
+    --accent: #6366F1;
+    --accent-soft: rgba(99,102,241,0.12);
+    --accent-glow: rgba(99,102,241,0.25);
+    --success: #22C55E;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+    --info: #3B82F6;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", Monaco, "Cascadia Code", "Fira Code", monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* Navbar */
+  .navbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: rgba(11,12,15,0.7);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-subtle);
+    height: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+  }
+  .nav-brand {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), #8B5CF6);
+    border-radius: 10px;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; color: #fff;
+  }
+  .logo-text { font-weight: 600; font-size: 15px; letter-spacing: -0.3px; }
+  .nav-links {
+    display: flex; align-items: center; gap: 28px;
+  }
+  .nav-links a {
+    font-size: 14px; color: var(--text-secondary);
+    transition: color .15s;
+  }
+  .nav-links a:hover { color: var(--text-primary); }
+  .nav-cta {
+    background: var(--accent); color: #fff;
+    font-size: 13px; font-weight: 500;
+    padding: 8px 16px; border-radius: var(--radius-sm);
+    transition: opacity .15s;
+  }
+  .nav-cta:hover { opacity: .9; }
+
+  /* Hero */
+  .hero {
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center;
+    padding: 120px 24px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+    background: radial-gradient(circle at 50% 40%, rgba(99,102,241,0.08) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent-soft);
+    border: 1px solid rgba(99,102,241,0.2);
+    color: var(--accent);
+    font-size: 12px; font-weight: 500;
+    padding: 6px 14px; border-radius: 100px;
+    margin-bottom: 24px;
+  }
+  .hero-badge .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 700;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    max-width: 800px;
+    margin-bottom: 20px;
+  }
+  .hero h1 span {
+    background: linear-gradient(135deg, var(--accent), #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    font-size: clamp(16px, 2vw, 20px);
+    color: var(--text-secondary);
+    max-width: 560px;
+    margin-bottom: 36px;
+  }
+  .hero-ctas {
+    display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 500;
+    padding: 12px 24px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: all .15s;
+    border: none;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff;
+  }
+  .btn-primary:hover { opacity: .9; transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--bg-elevated); color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+  }
+  .btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-medium); }
+
+  /* Features */
+  .features {
+    padding: 100px 24px;
+    max-width: 1200px; margin: 0 auto;
+  }
+  .section-header {
+    text-align: center; margin-bottom: 64px;
+  }
+  .section-header h2 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700; letter-spacing: -0.5px;
+    margin-bottom: 12px;
+  }
+  .section-header p {
+    color: var(--text-secondary); font-size: 17px;
+    max-width: 500px; margin: 0 auto;
+  }
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 28px;
+    transition: border-color .15s, transform .15s;
+  }
+  .feature-card:hover {
+    border-color: var(--border-medium);
+    transform: translateY(-2px);
+  }
+  .feature-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-sm);
+    display: grid; place-items: center; font-size: 18px;
+    margin-bottom: 16px;
+  }
+  .feature-icon.purple { background: var(--accent-soft); }
+  .feature-icon.green { background: rgba(34,197,94,0.12); }
+  .feature-icon.amber { background: rgba(245,158,11,0.12); }
+  .feature-icon.blue { background: rgba(59,130,246,0.12); }
+  .feature-icon.red { background: rgba(239,68,68,0.12); }
+  .feature-icon.teal { background: rgba(20,184,166,0.12); }
+  .feature-card h3 {
+    font-size: 16px; font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .feature-card p {
+    font-size: 14px; color: var(--text-secondary); line-height: 1.6;
+  }
+
+  /* Stats */
+  .stats {
+    padding: 80px 24px;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+    max-width: 1000px; margin: 0 auto;
+    text-align: center;
+  }
+  .stat-number {
+    font-size: 40px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), #8B5CF6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 6px;
+  }
+  .stat-label {
+    font-size: 14px; color: var(--text-secondary);
+  }
+
+  /* CTA */
+  .cta {
+    padding: 100px 24px;
+    text-align: center;
+  }
+  .cta h2 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700; letter-spacing: -0.5px;
+    margin-bottom: 16px;
+  }
+  .cta p {
+    color: var(--text-secondary); font-size: 17px;
+    max-width: 480px; margin: 0 auto 32px;
+  }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border-subtle);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .features-grid { grid-template-columns: repeat(2, 1fr); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 600px) {
+    .features-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .hero { padding-top: 100px; }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="logo-mark">OS</div>
+      <div class="logo-text">OpenScanAI</div>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#stats">Stats</a>
+      <a href="/dashboard">Dashboard</a>
+      <a href="/dashboard" class="nav-cta">Get Started</a>
+    </div>
+    <a href="/dashboard" class="nav-cta" style="margin-left:auto;">Get Started</a>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      Now in public beta
+    </div>
+    <h1>AI Agents That Actually <span>Get Work Done</span></h1>
+    <p>OpenScanAI brings automation, intelligent agents, and a unified control dashboard together in one system.</p>
+    <div class="hero-ctas">
+      <a href="/dashboard" class="btn btn-primary">Launch Dashboard →</a>
+      <a href="#features" class="btn btn-secondary">Explore Features</a>
+    </div>
+  </section>
+
+  <section class="features" id="features">
+    <div class="section-header">
+      <h2>Everything you need to scale</h2>
+      <p>One platform. Infinite agents. Zero friction.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon purple">🤖</div>
+        <h3>AI Agent Workforce</h3>
+        <p>Hire, manage, and monitor a team of specialized AI agents — each with unique skills and responsibilities.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon green">✓</div>
+        <h3>Task Automation</h3>
+        <p>Assign tasks, track progress, and let agents execute autonomously with full audit trails.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon amber">⚡</div>
+        <h3>Real-time Control</h3>
+        <p>Live dashboard with heartbeat monitoring, run transcripts, and instant status updates.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon blue">📊</div>
+        <h3>Analytics & Insights</h3>
+        <p>Track agent performance, task completion rates, and system health at a glance.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon red">🔒</div>
+        <h3>Enterprise Security</h3>
+        <p>Role-based access, audit logs, and secure API keys for every agent integration.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon teal">🔌</div>
+        <h3>Plugin Ecosystem</h3>
+        <p>Extend with custom adapters, tools, and integrations via the plugin marketplace.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats" id="stats">
+    <div class="stats-grid">
+      <div>
+        <div class="stat-number">12</div>
+        <div class="stat-label">Active Agents</div>
+      </div>
+      <div>
+        <div class="stat-number">1,284</div>
+        <div class="stat-label">Tasks Completed</div>
+      </div>
+      <div>
+        <div class="stat-number">1.2s</div>
+        <div class="stat-label">Avg Response Time</div>
+      </div>
+      <div>
+        <div class="stat-number">99.9%</div>
+        <div class="stat-label">Uptime</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <h2>Ready to automate?</h2>
+    <p>Join the future of AI-powered operations. Launch your dashboard and start delegating.</p>
+    <a href="/dashboard" class="btn btn-primary">Launch Dashboard →</a>
+  </section>
+
+  <footer class="footer">
+    © 2026 OpenScanAI. Built with Paperclip.
+  </footer>
+
+</body>
+</html>

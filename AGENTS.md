@@ -135,7 +135,41 @@ pnpm build
 
 If anything cannot be run, explicitly report what was not run and why.
 
-## 8. API and Auth Expectations
+## 8. API Route Standards
+
+All new API routes must:
+
+1. Log an activity entry via `logActivity(action, userId, metadata)`.
+2. Return `{success: true, logged: true, data: ...}` instead of bare success responses.
+3. Include an `x-activity-id` header in the response.
+
+## 9. Error Handling Standards
+
+All async route handlers MUST use a `try/catch` wrapper.
+
+In the catch block, always call `logError(error, { route: req.path, userId: req.user?.id })` before returning.
+
+Error responses must return this exact shape:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERR_<UPPERCASE_NAME>",
+    "message": "error.message"
+  }
+}
+```
+
+HTTP status codes:
+
+- `500` — unexpected errors
+- `400` — validation errors
+- `404` — not found
+
+The `logError` function is available in `server/src/services/error-logger.ts`.
+
+## 10. API and Auth Expectations
 
 - Base path: `/api`
 - Board access is treated as full-control operator context
@@ -149,13 +183,13 @@ When adding endpoints:
 - write activity log entries for mutations
 - return consistent HTTP errors (`400/401/403/404/409/422/500`)
 
-## 9. UI Expectations
+## 10. UI Expectations
 
 - Keep routes and nav aligned with available API surface
 - Use company selection context for company-scoped pages
 - Surface failures clearly; do not silently ignore API errors
 
-## 10. Pull Request Requirements
+## 11. Pull Request Requirements
 
 When creating a pull request (via `gh pr create` or any other method), you **must** read and fill in every section of [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Do not craft ad-hoc PR bodies — use the template as the structure for your PR description. Required sections:
 
@@ -166,7 +200,7 @@ When creating a pull request (via `gh pr create` or any other method), you **mus
 - **Model Used** — the AI model that produced or assisted with the change (provider, exact model ID, context window, capabilities). Write "None — human-authored" if no AI was used.
 - **Checklist** — all items checked
 
-## 11. Definition of Done
+## 12. Definition of Done
 
 A change is done when all are true:
 
@@ -176,7 +210,7 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
-## 11. Fork-Specific: HenkDz/paperclip
+## 13. Fork-Specific: HenkDz/paperclip
 
 This is a fork of `paperclipai/paperclip` with QoL patches and an **external-only** Hermes adapter story on branch `feat/externalize-hermes-adapter` ([tree](https://github.com/HenkDz/paperclip/tree/feat/externalize-hermes-adapter)).
 

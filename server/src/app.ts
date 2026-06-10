@@ -45,6 +45,7 @@ import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
 import { createMemoryService, type MemoryService } from "./memory/MemoryService.js";
+import { createAgentMemoryClient } from "./memory/AgentMemoryClient.js";
 import { createMemoryLifecycle } from "./memory/MemoryLifecycle.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -114,7 +115,7 @@ export async function createApp(
     uiMode: UiMode;
     serverPort: number;
     storageService: StorageService;
-    memoryConfig?: { enabled: boolean; baseUrl?: string; autoStart?: boolean };
+    memoryConfig?: { enabled: boolean; baseUrl?: string; autoStart?: boolean; backend?: "native" | "agentmemory"; secret?: string };
     memoryService?: MemoryService;
     feedbackExportService?: {
       flushPendingFeedbackTraces(input?: {
@@ -179,7 +180,12 @@ export async function createApp(
 
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = opts.pluginWorkerManager ?? createPluginWorkerManager();
-  const memoryService = opts.memoryService ?? createMemoryService(opts.memoryConfig ?? { enabled: false });
+  const memoryConfig = opts.memoryConfig ?? { enabled: false };
+  const memoryService = opts.memoryService ?? (
+    memoryConfig.backend === "agentmemory"
+      ? createAgentMemoryClient(memoryConfig)
+      : createMemoryService(memoryConfig)
+  );
   const memoryLifecycle = createMemoryLifecycle(memoryService);
 
   // Mount API routes

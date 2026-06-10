@@ -37,6 +37,7 @@ import {
   stringifyPaperclipWakePayload,
   refreshPaperclipWorkspaceEnvForExecution,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
+  extractMemoryContext,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_GROK_LOCAL_MODEL } from "../index.js";
 import { isGrokUnknownSessionError, parseGrokJsonl } from "./parse.js";
@@ -413,7 +414,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
     const paperclipEnvNote = renderPaperclipEnvNote(env);
     const apiAccessNote = renderApiAccessNote(env);
+    const memoryContext = extractMemoryContext(context);
     const prompt = joinPromptSections([
+      memoryContext,
       wakePrompt,
       sessionHandoffNote,
       paperclipEnvNote,

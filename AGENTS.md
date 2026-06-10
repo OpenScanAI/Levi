@@ -210,7 +210,19 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
-## 13. Fork-Specific: HenkDz/paperclip
+## 13. README Template Convention
+
+All project README files must include a **Quick Start** section with exactly 3 steps:
+
+1. **Installation** — how to install dependencies
+2. **Configuration** — how to configure the project
+3. **Running** — how to start the project
+
+## 14. File Naming Convention
+
+All utility files must be named with the `.util.ts` suffix (e.g., `date.util.ts` not `date-utils.ts`).
+
+## 15. Fork-Specific: HenkDz/paperclip
 
 This is a fork of `paperclipai/paperclip` with QoL patches and an **external-only** Hermes adapter story on branch `feat/externalize-hermes-adapter` ([tree](https://github.com/HenkDz/paperclip/tree/feat/externalize-hermes-adapter)).
 

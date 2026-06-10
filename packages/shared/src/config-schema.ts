@@ -104,9 +104,11 @@ export const telemetryConfigSchema = z.object({
 }).default({});
 
 export const memoryConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   baseUrl: z.string().optional(),
   autoStart: z.boolean().default(true),
+  backend: z.enum(["native", "agentmemory"]).default("native"),
+  secret: z.string().optional(),
 }).default({});
 
 export const paperclipConfigSchema = z

@@ -79,7 +79,8 @@ export function createAgentMemoryMockApp(): express.Express {
   });
 
   app.delete("/namespaces/:ns", (req: Request, res: Response) => {
-    const ns = decodeURIComponent(req.params.ns);
+    const nsParam = req.params.ns;
+    const ns = typeof nsParam === "string" ? decodeURIComponent(nsParam) : "";
     observations = observations.filter(
       (o) => o.namespace !== ns && !o.namespace.startsWith(`${ns}:`),
     );
@@ -87,4 +88,13 @@ export function createAgentMemoryMockApp(): express.Express {
   });
 
   return app;
+}
+
+// Standalone runner — only executes when run directly, not when imported by tests
+if (process.argv[1]?.includes("agentmemory-mock")) {
+  const PORT = 3111;
+  const app = createAgentMemoryMockApp();
+  app.listen(PORT, () => {
+    console.log(`agentmemory mock running on http://localhost:${PORT}`);
+  });
 }

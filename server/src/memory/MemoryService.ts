@@ -9,6 +9,8 @@ export interface MemoryServiceConfig {
   enabled: boolean;
   baseUrl?: string;
   autoStart?: boolean;
+  backend?: "native" | "agentmemory";
+  secret?: string;
 }
 
 export interface MemoryService {

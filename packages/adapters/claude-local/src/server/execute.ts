@@ -44,6 +44,7 @@ import {
   shapePaperclipWorkspaceEnvForExecution,
   stringifyPaperclipWakePayload,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
+  extractMemoryContext,
 } from "@paperclipai/adapter-utils/server-utils";
 import { shellQuote } from "@paperclipai/adapter-utils/ssh";
 import {
@@ -656,7 +657,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const renderedPrompt = shouldUseResumeDeltaPrompt ? "" : renderTemplate(promptTemplate, templateData);
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const taskContextNote = asString(context.paperclipTaskMarkdown, "").trim();
+  const memoryContext = extractMemoryContext(context);
   const prompt = joinPromptSections([
+    memoryContext,
     renderedBootstrapPrompt,
     wakePrompt,
     sessionHandoffNote,

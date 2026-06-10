@@ -94,7 +94,9 @@ export async function startServer(): Promise<StartedServer> {
   let config = loadConfig();
   const fileConfig = readConfigFile();
   const memoryConfig = fileConfig?.memory ?? { enabled: false };
-  const memoryService = createMemoryService(memoryConfig);
+  const memoryService = (memoryConfig as any).backend === "agentmemory"
+    ? (await import("./memory/AgentMemoryClient.js")).createAgentMemoryClient(memoryConfig as any)
+    : createMemoryService(memoryConfig);
   initTelemetry({ enabled: config.telemetryEnabled });
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;

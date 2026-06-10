@@ -7252,6 +7252,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           LEVI_MEMORY_CONTEXT: memoryInjection.contextBlock,
         },
       };
+      // Inject memory context into adapter context so all adapters can access it
+      context.paperclipMemoryContext = memoryInjection.contextBlock;
     }
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,

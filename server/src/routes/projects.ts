@@ -245,6 +245,70 @@ export function projectRoutes(db: Db, opts?: { memoryLifecycle?: MemoryLifecycle
     res.json(project);
   });
 
+  router.post("/projects/:id/archive", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const project = await svc.update(id, { status: "archived", archivedAt: new Date() });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.archived",
+      entityType: "project",
+      entityId: project.id,
+      details: {
+        previousStatus: existing.status,
+      },
+    });
+
+    res.json(project);
+  });
+
+  router.post("/projects/:id/unarchive", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const project = await svc.update(id, { status: "active", archivedAt: null });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.unarchived",
+      entityType: "project",
+      entityId: project.id,
+      details: {
+        previousStatus: existing.status,
+      },
+    });
+
+    res.json(project);
+  });
+
   router.get("/projects/:id/workspaces", async (req, res) => {
     const id = req.params.id as string;
     const existing = await svc.getById(id);

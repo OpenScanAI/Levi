@@ -8570,6 +8570,14 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         (run.status === "failed" || run.status === "timed_out" || run.status === "cancelled");
 
       if (!issueNeedsImmediateRecovery) {
+        // Clear task session when issue reaches terminal status to prevent
+        // infinite resume loops from handoff wakes with resumeIntent=true
+        if (issue.status === "done" || issue.status === "cancelled") {
+          await clearTaskSessions(run.companyId, run.agentId, {
+            taskKey,
+            adapterType: recoveryAgent?.adapterType,
+          });
+        }
         return { kind: "released" as const };
       }
 

@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Auto-detect tsx path
+TSX=""
+for path in \
+  "./server/node_modules/.bin/tsx" \
+  "./node_modules/.bin/tsx" \
+  "$(which tsx 2>/dev/null || true)"
+do
+  if [ -x "$path" ]; then
+    TSX="$path"
+    break
+  fi
+done
+
+if [ -z "$TSX" ]; then
+  echo "❌ tsx not found. Install with: npm install -g tsx" >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_URL="${1:-}"
+shift || true
+
+if [ -z "$REPO_URL" ]; then
+  echo "Usage: import-agents <github-repo-url> [options]"
+  echo ""
+  echo "Options:"
+  echo "  --company-id <id>    Company ID for agent creation"
+  echo "  --github-token <tok> GitHub API token (optional)"
+  echo "  --reports-to <id>    Agent ID to report to"
+  echo "  --dry-run            Preview without creating agents"
+  echo ""
+  echo "Example:"
+  echo "  import-agents https://github.com/msitarzewski/agency-agents --dry-run"
+  exit 1
+fi
+
+echo "🚀 Paperclip Agent Importer"
+echo "============================"
+echo ""
+
+# Parse owner/repo from URL
+if [[ "$REPO_URL" =~ github\.com/([^/]+)/([^/]+) ]]; then
+  OWNER="${BASH_REMATCH[1]}"
+  REPO="${BASH_REMATCH[2]}"
+  echo "📦 Repository: $OWNER/$REPO"
+else
+  echo "❌ Invalid GitHub URL: $REPO_URL" >&2
+  exit 1
+fi
+
+# Step 1: Read GitHub repo
+echo ""
+echo "📖 Step 1: Fetching agent definitions..."
+"$TSX" "$SCRIPT_DIR/scripts/github-repo-reader.ts" "$OWNER/$REPO" "$@" > /tmp/import_step1.txt 2>&1
+
+if ! grep -q "Found" /tmp/import_step1.txt; then
+  echo "❌ Failed to read repository" >&2
+  cat /tmp/import_step1.txt >&2
+  exit 1
+fi
+
+AGENT_COUNT=$(grep -oP "Found \K\d+" /tmp/import_step1.txt || echo "0")
+echo "✅ Found $AGENT_COUNT agent(s)"
+
+if [ "$AGENT_COUNT" -eq 0 ]; then
+  echo "⚠️  No agents found. Exiting."
+  exit 0
+fi
+
+# Extract JSON
+sed -n '/---JSON---/,$p' /tmp/import_step1.txt | tail -n +2 > /tmp/import_agents.json
+
+# Step 2: Convert
+echo ""
+echo "🔧 Step 2: Converting to Paperclip format..."
+"$TSX" "$SCRIPT_DIR/scripts/agent-format-converter.ts" /tmp/import_agents.json > /tmp/import_step2.txt 2>&1
+
+if ! grep -q "Success:" /tmp/import_step2.txt; then
+  echo "❌ Conversion failed" >&2
+  cat /tmp/import_step2.txt >&2
+  exit 1
+fi
+
+SUCCESS_COUNT=$(grep -oP "Success: \K\d+" /tmp/import_step2.txt || echo "0")
+FAILED_COUNT=$(grep -oP "Failed: \K\d+" /tmp/import_step2.txt || echo "0")
+echo "✅ Converted: $SUCCESS_COUNT success, $FAILED_COUNT failed"
+
+# Extract converted agents
+sed -n '/---JSON---/,$p' /tmp/import_step2.txt | tail -n +2 > /tmp/import_converted.json
+
+# Step 3: Create agents (or dry-run)
+echo ""
+if echo "$@" | grep -q "\-\-dry-run"; then
+  echo "🔍 Step 3: DRY RUN — Preview only"
+  echo ""
+  echo "Agents that would be created:"
+  python3 -c "
+import json
+agents = json.load(open('/tmp/import_converted.json'))
+for a in agents[:10]:
+    print(f'  • {a[\"name\"]} ({a[\"role\"]}) — {a[\"title\"]}')
+if len(agents) > 10:
+    print(f'  ... and {len(agents)-10} more')
+" 2>/dev/null || echo "  (install python3 for pretty output)"
+  echo ""
+  echo "💡 Remove --dry-run to actually create agents"
+else
+  echo "📝 Step 3: Creating agents via API..."
+  "$TSX" "$SCRIPT_DIR/scripts/import-agents.ts" "$REPO_URL" "$@"
+fi
+
+echo ""
+echo "🎉 Done!"

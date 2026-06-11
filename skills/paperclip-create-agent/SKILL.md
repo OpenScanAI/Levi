@@ -21,6 +21,52 @@ If you do not have this permission, escalate to your CEO or board.
 
 ## Workflow
 
+### Import from GitHub Repo (Optional)
+
+If the user wants to import agents from an external GitHub repository (e.g., agency-agents), use this flow instead of manual creation.
+
+#### 1. Read GitHub Repository
+
+Use the `github-repo-reader` skill:
+```
+skill: github-repo-reader
+input: https://github.com/<owner>/<repo>
+output: Array of agent definitions in external format
+```
+
+#### 2. Convert to Paperclip Schema
+
+Use the `agent-format-converter` skill:
+```
+skill: agent-format-converter
+input: External agent definitions
+output: Array of agents in Paperclip native schema
+```
+
+#### 3. Validate and Deduplicate
+
+- Check if any agent names/roles already exist
+- Append numbers for duplicates (e.g., "marketing-agent-2")
+- Validate all required fields
+
+#### 4. Create Agents
+
+For each converted agent, follow the standard hire request flow (Steps 5-9 below).
+
+#### 5. Report Results
+
+```markdown
+## Import Results
+
+| Agent | Status | PR |
+|-------|--------|-----|
+| MarketingAgent | Created | #101 |
+| SalesAgent | Created | #102 |
+| SupportAgent | Failed | Error: icon not found |
+```
+
+---
+
 ### 1. Confirm identity and company context
 
 ```sh

@@ -56,7 +56,7 @@ export function InlineEditor({
   mentions,
   foldable = false,
 }: InlineEditorProps) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(true );
   const [multilineEditing, setMultilineEditing] = useState(false);
   const [multilineFocused, setMultilineFocused] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -400,7 +400,11 @@ export function InlineEditor({
       )}
       onClick={() => setEditing(true)}
     >
-      {value || placeholder}
+      {value || (
+  <span className="text-muted-foreground italic">
+    {placeholder}
+  </span>
+)}
     </DisplayTag>
   );
 }

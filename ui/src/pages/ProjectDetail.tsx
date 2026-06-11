@@ -80,7 +80,7 @@ function OverviewContent({
         nullable
         as="p"
         className="text-sm text-muted-foreground"
-        placeholder="Add a description..."
+        placeholder="No description yet"
         multiline
         imageUploadHandler={imageUploadHandler}
       />

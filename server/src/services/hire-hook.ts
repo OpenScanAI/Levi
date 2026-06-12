@@ -39,7 +39,7 @@ export async function notifyHireApproved(
     return;
   }
 
-  const adapterType = row.adapterType ?? "process";
+  const adapterType = row.adapterType ?? "claude_local";
   const adapter = findActiveServerAdapter(adapterType);
   const onHireApproved = adapter?.onHireApproved;
   if (!onHireApproved) {

@@ -476,3 +476,22 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  createResearchSessionSchema,
+  updateResearchSessionSchema,
+  generateSubtopicsSchema,
+  createResearchTaskSchema,
+  updateResearchTaskSchema,
+  createResearchFindingSchema,
+  markDuplicateSchema,
+  createResearchMemorySchema,
+  type CreateResearchSession,
+  type UpdateResearchSession,
+  type GenerateSubtopics,
+  type CreateResearchTask,
+  type UpdateResearchTask,
+  type CreateResearchFinding,
+  type MarkDuplicate,
+  type CreateResearchMemory,
+} from "./research.js";

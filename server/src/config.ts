@@ -87,6 +87,15 @@ export interface Config {
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
   telemetryEnabled: boolean;
+  // Research module config
+  researchEngineEnabled: boolean;
+  researchSearchProvider: string | undefined;
+  serperApiKey: string | undefined;
+  semanticScholarApiKey: string | undefined;
+  researchLlmModel: string | undefined;
+  researchLlmApiKey: string | undefined;
+  researchMaxSearchResults: number;
+  researchMaxFindingsPerTask: number;
 }
 
 function detectTailnetBindHost(): string | undefined {
@@ -333,5 +342,14 @@ export function loadConfig(): Config {
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
     companyDeletionEnabled,
     telemetryEnabled: fileConfig?.telemetry?.enabled ?? true,
+    // Research module defaults
+    researchEngineEnabled: process.env.RESEARCH_ENGINE_ENABLED !== "false",
+    researchSearchProvider: process.env.RESEARCH_SEARCH_PROVIDER || undefined,
+    serperApiKey: process.env.SERPER_API_KEY || undefined,
+    semanticScholarApiKey: process.env.SEMANTIC_SCHOLAR_API_KEY || undefined,
+    researchLlmModel: process.env.RESEARCH_LLM_MODEL || undefined,
+    researchLlmApiKey: process.env.RESEARCH_LLM_API_KEY || undefined,
+    researchMaxSearchResults: Math.max(1, Number(process.env.RESEARCH_MAX_SEARCH_RESULTS) || 10),
+    researchMaxFindingsPerTask: Math.max(1, Number(process.env.RESEARCH_MAX_FINDINGS_PER_TASK) || 20),
   };
 }

@@ -17,6 +17,7 @@ export const createResearchSessionSchema = z.object({
   query: z.string().min(1).max(2000),
   depth: researchDepthSchema.optional().default("medium"),
   maxSubtopics: z.number().int().min(1).max(20).optional().default(5),
+  plan: z.record(z.unknown()).optional(),
 });
 
 export const updateResearchSessionSchema = z.object({

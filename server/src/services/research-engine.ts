@@ -772,14 +772,15 @@ export function researchEngine(deps: ResearchEngineDeps) {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-function confidenceToScore(confidence: string): number {
+function confidenceToScore(confidence: string | number): number {
+  if (typeof confidence === "number") return Math.min(100, Math.max(0, confidence));
   switch (confidence) {
     case "high":
-      return 85;
+      return 90;
     case "medium":
       return 60;
     case "low":
-      return 35;
+      return 30;
     default:
       return 50;
   }

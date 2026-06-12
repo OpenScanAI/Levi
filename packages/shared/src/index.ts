@@ -1248,3 +1248,22 @@ export type {
   EnvironmentProviderCapability,
   EnvironmentSupportStatus,
 } from "./environment-support.js";
+
+export {
+  createResearchSessionSchema,
+  updateResearchSessionSchema,
+  generateSubtopicsSchema,
+  createResearchTaskSchema,
+  updateResearchTaskSchema,
+  createResearchFindingSchema,
+  markDuplicateSchema,
+  createResearchMemorySchema,
+  type CreateResearchSession,
+  type UpdateResearchSession,
+  type GenerateSubtopics,
+  type CreateResearchTask,
+  type UpdateResearchTask,
+  type CreateResearchFinding,
+  type MarkDuplicate,
+  type CreateResearchMemory,
+} from "./validators/index.js";

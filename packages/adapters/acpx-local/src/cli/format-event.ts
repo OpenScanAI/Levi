@@ -29,11 +29,15 @@ function stringify(value: unknown): string {
 }
 
 function pickToolUseId(parsed: Record<string, unknown>): string {
-  return (
+  const id = (
     asString(parsed.toolCallId) ||
     asString(parsed.toolUseId) ||
     asString(parsed.id)
   );
+  if (!id) {
+    console.warn("[acpx] tool event missing toolCallId/toolUseId/id, using fallback");
+  }
+  return id || `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function statusLine(parsed: Record<string, unknown>): string {

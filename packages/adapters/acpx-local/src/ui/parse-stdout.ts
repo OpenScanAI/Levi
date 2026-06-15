@@ -29,11 +29,15 @@ function stringify(value: unknown): string {
 }
 
 function pickToolUseId(parsed: Record<string, unknown>): string {
-  return (
+  const id = (
     asString(parsed.toolCallId) ||
     asString(parsed.toolUseId) ||
     asString(parsed.id)
   );
+  if (!id) {
+    console.warn("[acpx] tool event missing toolCallId/toolUseId/id, using fallback");
+  }
+  return id || `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function statusText(parsed: Record<string, unknown>): string {
@@ -97,7 +101,7 @@ export function parseAcpxStdoutLine(line: string, ts: string): TranscriptEntry[]
         kind: "tool_call",
         ts,
         name,
-        toolUseId: toolUseId || undefined,
+        toolUseId: toolUseId,
         input,
       },
     ];
@@ -105,7 +109,7 @@ export function parseAcpxStdoutLine(line: string, ts: string): TranscriptEntry[]
       entries.push({
         kind: "tool_result",
         ts,
-        toolUseId: toolUseId || name,
+        toolUseId: toolUseId,
         toolName: name,
         content: text || status,
         isError: status !== "completed",

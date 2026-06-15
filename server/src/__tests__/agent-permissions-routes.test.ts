@@ -42,6 +42,7 @@ const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
   list: vi.fn(),
   create: vi.fn(),
+  createApiKey: vi.fn(),
   activatePendingApproval: vi.fn(),
   update: vi.fn(),
   updatePermissions: vi.fn(),
@@ -296,6 +297,7 @@ describe.sequential("agent permission routes", () => {
     mockAgentService.getById.mockReset();
     mockAgentService.list.mockReset();
     mockAgentService.create.mockReset();
+    mockAgentService.createApiKey.mockReset();
     mockAgentService.activatePendingApproval.mockReset();
     mockAgentService.update.mockReset();
     mockAgentService.updatePermissions.mockReset();
@@ -335,6 +337,7 @@ describe.sequential("agent permission routes", () => {
     mockAgentService.getChainOfCommand.mockResolvedValue([]);
     mockAgentService.resolveByReference.mockResolvedValue({ ambiguous: false, agent: baseAgent });
     mockAgentService.create.mockResolvedValue(baseAgent);
+    mockAgentService.createApiKey.mockResolvedValue({ id: "key-1", name: "auto-generated", token: "pcp_test_token", createdAt: new Date() });
     mockAgentService.activatePendingApproval.mockResolvedValue({
       agent: baseAgent,
       activated: false,

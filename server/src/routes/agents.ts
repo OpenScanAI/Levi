@@ -541,6 +541,25 @@ export function agentRoutes(
     );
   }
 
+  async function applyDefaultAgentCreateGrant(
+    companyId: string,
+    agentId: string,
+    role: string,
+    grantedByUserId: string | null,
+  ) {
+    const leadershipRoles = ["ceo", "cto", "cfo", "coo", "vp", "director"];
+    if (!leadershipRoles.includes(role)) return;
+    await access.ensureMembership(companyId, "agent", agentId, "member", "active");
+    await access.setPrincipalPermission(
+      companyId,
+      "agent",
+      agentId,
+      "agents:create",
+      true,
+      grantedByUserId,
+    );
+  }
+
   async function assertCanCreateAgentsForCompany(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
@@ -2107,6 +2126,13 @@ export function agentRoutes(
       agent.id,
       actor.actorType === "user" ? actor.actorId : null,
     );
+    await applyDefaultAgentCreateGrant(
+      companyId,
+      agent.id,
+      agent.role,
+      actor.actorType === "user" ? actor.actorId : null,
+    );
+    await svc.createApiKey(agent.id, "auto-generated");
 
     if (approval) {
       await logActivity(db, {
@@ -2228,6 +2254,13 @@ export function agentRoutes(
       agent.id,
       req.actor.type === "board" ? (req.actor.userId ?? null) : null,
     );
+    await applyDefaultAgentCreateGrant(
+      companyId,
+      agent.id,
+      agent.role,
+      req.actor.type === "board" ? (req.actor.userId ?? null) : null,
+    );
+    await svc.createApiKey(agent.id, "auto-generated");
 
     if (agent.budgetMonthlyCents > 0) {
       await budgets.upsertPolicy(

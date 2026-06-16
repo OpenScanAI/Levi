@@ -22,7 +22,7 @@ import {
 import path from "node:path";
 import { detectClaudeLoginRequired, parseClaudeStreamJson } from "./parse.js";
 import { isBedrockModelId } from "./models.js";
-import { buildClaudeProbePermissionArgs } from "./permissions.js";
+import { buildClaudeProbePermissionArgs, buildClaudeRootEscapeEnv } from "./permissions.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
@@ -220,6 +220,14 @@ export async function testEnvironment(
         asNumber(config.helloProbeTimeoutSec, targetIsSandbox ? 90 : 45),
       );
 
+      const probeEnv = {
+        ...env,
+        ...buildClaudeRootEscapeEnv({
+          dangerouslySkipPermissions,
+          targetIsRemote,
+          targetIsSandbox,
+        }),
+      };
       const probe = await runAdapterExecutionTargetProcess(
         runId,
         target,
@@ -227,7 +235,7 @@ export async function testEnvironment(
         args,
         {
           cwd,
-          env,
+          env: probeEnv,
           timeoutSec: helloProbeTimeoutSec,
           graceSec: 5,
           stdin: "Respond with hello.",

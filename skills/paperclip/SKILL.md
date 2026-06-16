@@ -84,6 +84,31 @@ If `currentParticipant` matches you, submit your decision via the normal update 
 
 If `currentParticipant` does not match you, do not try to advance the stage — Paperclip will reject other actors with `422`.
 
+
+## Delegate vs Execute (Manager-Role Default)
+
+Before Step 7 ("Do the work"), if your `role` is `ceo`, `cto`, `manager`, or any lead title, your default action on a task is **NOT** to execute it personally. It is to **delegate**.
+
+The decision tree:
+
+1. **Read the task.** Identify the kind of work (frontend, backend, data, security, design, QA, research, etc.).
+2. **Find the right delegate.** Use `GET /api/companies/{companyId}/agents` and filter `reportsTo == your-id`. Match against each candidate's `role` and `capabilities`.
+3. **Delegate by creating a child issue** with `POST /api/companies/{companyId}/issues`, setting `parentId` to the current issue, `assigneeAgentId` to the chosen specialist, and a clear acceptance criterion in the description.
+4. **Comment on the parent** with the delegation: who, what, and link to the child issue identifier. Then either mark the parent `in_review` (if there is a review path) or keep it `in_progress` only with a monitor that will wake you on the child's completion. Never leave it `in_progress` with no wake path.
+5. **Exit.** Do not also start the work. The child agent's heartbeat will wake them; their completion will wake you.
+
+**Execute personally only when at least one is true**:
+
+- The task is **pure architecture** — designing layout, choosing between technologies, drafting an ADR. No code, no UI.
+- **No suitable delegate exists AND hiring would be slower** than the task itself. Use this for bounded-scope (<30 min) emergencies where the user is actively watching.
+- The task is **reviewing** a delegate's deliverable, or **unblocking** them organizationally.
+- The task **explicitly asks** you (the manager) to do it personally — and the requester knows what they are asking for.
+
+If no suitable delegate exists for a recurring kind of work, your action is to **hire**, not to execute. Use the `paperclip-create-agent` skill to onboard a new specialist.
+
+**Self-assignment is a failure mode.** A manager-role agent that picks up a non-architecture task and starts coding has misread its job. If you find yourself about to do this, stop, find the right delegate (or trigger a hire), and re-route.
+
+
 **Step 7 — Do the work.** Use your tools and capabilities. Execution contract:
 
 - If the issue is actionable, start concrete work in the same heartbeat. Do not stop at a plan unless the issue specifically asks for planning.
@@ -99,7 +124,9 @@ If you are blocked at any point, you MUST update the issue to `blocked` before e
 
 Before ending any heartbeat, apply this final-disposition checklist:
 
-- `done`: the requested work is complete, verification is recorded, and no follow-up remains on this issue.
+- `done`: the requested work is complete, verification is recorded, no follow-up remains on this issue, **and any worktrees created for this issue are removed**:
+  - AutoBot worktree: `git worktree remove --force /home/martins/AutoBot-Ai/AutoBot-AI/.worktrees/<branch>/`
+  - Paperclip dev clone: `rm -rf /home/martins/paperclip-<issue>/` + `rm -rf ~/.paperclip-worktrees/instances/paperclip-<issue>/`
 - `in_review`: a real reviewer path exists, such as a typed execution participant, board/user owner, linked approval, pending interaction, or an explicit monitor that will wake the assignee later. Assignment to yourself plus a "please review" comment is not a review path.
 - `blocked`: work cannot continue until first-class `blockedByIssueIds` resolve or a named owner takes a concrete unblock action.
 - Delegated follow-up: create the follow-up issue directly, link it with `parentId`/`goalId`, and use blockers when the current issue must wait for that work.
@@ -222,6 +249,65 @@ When an issue needs browser/manual QA or a preview server, inspect its current e
 
 For commands, response fields, and MCP tools, read:
 `skills/paperclip/references/issue-workspaces.md`
+
+## Orphaned Work
+
+**Orphaned work** is any git artifact (branch, PR, worktree, commit) or GitHub change that is either not linked to a Paperclip issue, or linked to an issue whose status doesn't reflect the actual state of the work.
+
+### Mandatory: link every GitHub artifact to the issue immediately
+
+Never exit a heartbeat with unlisted GitHub work. Whenever you create a branch, open a PR, or push commits, post a comment on the Paperclip issue in this format:
+
+```
+## Work artifact — <type>
+
+- **PR**: <url> (or "none yet")
+- **Branch**: `<branch-name>`
+- **Commits**: <sha list or "pending">
+- **Status**: <awaiting CI / awaiting review / merged / etc.>
+```
+
+### Mandatory: log every fix attempt outcome
+
+Whether a fix attempt succeeded or failed, record it before exiting the heartbeat:
+
+**On failure:**
+```
+## Fix attempt N/MAX — ❌ FAILED
+
+**Approach**: <what was tried>
+**Error** (last ~20 lines):
+<trimmed error output>
+**Reverted**: <files or "all production changes reverted, test retained">
+**Next**: <next approach or "exhausted — posting failure report">
+```
+
+**On success:**
+```
+## Fix attempt N/MAX — ✅ PASSED
+
+**PR**: <url>
+**What changed**: <summary of files edited>
+**Tests**: <N passed, regressions: none>
+```
+
+### Detecting orphaned work (CEO periodic sweep)
+
+Run this check when woken without specific assignments, or as part of any sprint review:
+
+1. **Unlinked open PRs** — `gh pr list -R mrveiss/AutoBot-AI --state open --json number,title,headRefName` — any PR whose branch matches `issue-NNNN` but has no `in_progress` or `in_review` Paperclip issue with that number is orphaned.
+
+2. **Stale worktrees** — `git -C /home/martins/AutoBot-Ai/AutoBot-AI worktree list` — any `issue-NNNN` worktree whose issue is `done`, `cancelled`, or non-existent is orphaned.
+
+3. **Dead in_review with merged/closed PR** — an issue stuck in `in_review` whose linked PR is already merged should be moved to `done`; if the PR was closed without merge, move to `todo` with a comment explaining the revert.
+
+### Recovering orphaned artifacts
+
+For each orphaned artifact, in priority order:
+
+- **Matching Paperclip issue exists** → comment on it with the artifact's current state, update the issue status to reflect reality, and reassign if needed.
+- **No matching issue** → create a new Paperclip issue (title: `orphaned work: <PR title or branch name>`), link the artifact, set status `todo`, assign to CEO for triage.
+- **Stale worktree, no live issue** → remove it: `git worktree remove --force /home/martins/AutoBot-Ai/AutoBot-AI/.worktrees/<name>` and delete the branch.
 
 ## Critical Rules
 

@@ -9,12 +9,14 @@ const serverRoot = path.join(repoRoot, "server");
 const serverTestsDir = path.join(repoRoot, "server", "src", "__tests__");
 const nonServerProjects = [
   "@paperclipai/shared",
+  "@paperclipai/skills-catalog",
   "@paperclipai/db",
   "@paperclipai/adapter-utils",
   "@paperclipai/adapter-acpx-local",
   "@paperclipai/adapter-codex-local",
   "@paperclipai/adapter-opencode-local",
   "@paperclipai/plugin-sdk",
+  "@paperclipai/create-paperclip-plugin",
   "@paperclipai/ui",
   "paperclipai",
 ];
@@ -73,6 +75,12 @@ const projectPathMappings = [
   { prefix: "packages/adapters/pi-local/", project: "@paperclipai/adapter-pi-local" },
   { prefix: "packages/adapters/openclaw-gateway/", project: "@paperclipai/adapter-openclaw-gateway" },
   { prefix: "packages/plugins/sdk/", project: "@paperclipai/plugin-sdk" },
+];
+
+const serializedServerVitestArgs = [
+  "--no-file-parallelism",
+  "--maxWorkers=1",
+  "--minWorkers=1",
 ];
 
 function walk(dir) {
@@ -302,6 +310,7 @@ function runVitest(args, label) {
   // Keep per-run paths compact so Unix socket fixtures stay under macOS path limits.
   const env = {
     ...process.env,
+    NODE_ENV: "test",
     PAPERCLIP_HOME: path.join(testRoot, "h"),
     PAPERCLIP_INSTANCE_ID: `vt-${process.pid}-${invocationIndex}`,
     TMPDIR: path.join(testRoot, "t"),
@@ -338,7 +347,12 @@ function runGeneralGroup(routeTests, groupName) {
   if (groupName === generalServerGroupName) {
     const excludeRouteArgs = routeTests.flatMap((file) => ["--exclude", file.serverPath]);
     runVitest(
-      ["--project", "@paperclipai/server", ...excludeRouteArgs],
+      [
+        "--project",
+        "@paperclipai/server",
+        ...serializedServerVitestArgs,
+        ...excludeRouteArgs,
+      ],
       `${groupName} server suites excluding ${routeTests.length} serialized suites`,
     );
     return;

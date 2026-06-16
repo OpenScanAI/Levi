@@ -41,3 +41,20 @@ export function buildClaudeExecutionPermissionArgs(input: {
   }
   return ["--dangerously-skip-permissions"];
 }
+
+// Claude CLI refuses `--dangerously-skip-permissions` under uid 0 unless
+// IS_SANDBOX=1 is set. When we're spawning Claude locally as root and would
+// otherwise pass that flag, inject the env var so the CLI accepts the flag
+// instead of exiting 1 with "cannot be used with root/sudo privileges".
+export function buildClaudeRootEscapeEnv(input: {
+  dangerouslySkipPermissions: boolean;
+  targetIsRemote: boolean;
+  targetIsSandbox: boolean;
+}): Record<string, string> {
+  if (!input.dangerouslySkipPermissions) return {};
+  if (input.targetIsSandbox) return {};
+  if (input.targetIsRemote) return {};
+  const getuid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  if (typeof getuid !== "function" || getuid.call(process) !== 0) return {};
+  return { IS_SANDBOX: "1" };
+}

@@ -52,15 +52,22 @@ import {
   describeClaudeFailure,
   detectClaudeLoginRequired,
   extractClaudeRetryNotBefore,
+  isClaudeModifiedThinkingReplayError,
   isClaudeMaxTurnsResult,
   isClaudeTransientUpstreamError,
   isClaudeUnknownSessionError,
 } from "./parse.js";
+import {
+  readKimiFallbackConfig,
+  buildKimiFallbackArgs,
+  parseKimiStreamJson,
+  describeKimiFallback,
+} from "./kimi-fallback.js";
 import { prepareClaudeConfigSeed } from "./claude-config.js";
 import { resolveClaudeDesiredSkillNames } from "./skills.js";
 import { isBedrockModelId } from "./models.js";
 import { prepareClaudePromptBundle } from "./prompt-cache.js";
-import { buildClaudeExecutionPermissionArgs } from "./permissions.js";
+import { buildClaudeExecutionPermissionArgs, buildClaudeRootEscapeEnv } from "./permissions.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -377,7 +384,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const effort = asString(config.effort, "");
   const chrome = asBoolean(config.chrome, false);
   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
-  const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, true);
+  // In Paperclip context, always skip permissions since interactive prompts can't be answered.
+  // This ensures subagents (spawned by Agent tool) inherit Bash and other permissions from parent.
+  const isPaperclipContext =
+    typeof context.paperclipWorkspace === "object" ||
+    (typeof context === "object" && context !== null && "paperclipWorkspace" in context);
+  const dangerouslySkipPermissions = isPaperclipContext
+    ? true
+    : asBoolean(config.dangerouslySkipPermissions, true);
   const configEnv = parseObject(config.env);
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceCwd = asString(workspaceContext.cwd, "");
@@ -746,15 +760,31 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         commandArgs: args,
         commandNotes,
         env: loggedEnv,
+        promptCache: {
+          strategy: "content-addressed-prompt-bundle",
+          bundleKey: promptBundle.bundleKey,
+          rootDir: promptBundle.rootDir,
+          addDir: effectivePromptBundleAddDir,
+          instructionsFilePath: effectiveInstructionsFilePath ?? null,
+          telemetry: "usage.cachedInputTokens",
+        },
         prompt,
         promptMetrics,
         context,
       });
     }
 
+    const spawnEnv = {
+      ...env,
+      ...buildClaudeRootEscapeEnv({
+        dangerouslySkipPermissions,
+        targetIsRemote: executionTargetIsRemote,
+        targetIsSandbox: executionTargetIsSandbox,
+      }),
+    };
     const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
       cwd,
-      env,
+      env: spawnEnv,
       stdin: prompt,
       timeoutSec,
       graceSec,
@@ -951,14 +981,119 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       !initial.proc.timedOut &&
       (initial.proc.exitCode ?? 0) !== 0 &&
       initial.parsed &&
-      isClaudeUnknownSessionError(initial.parsed)
+      (isClaudeUnknownSessionError(initial.parsed) || isClaudeModifiedThinkingReplayError(initial.parsed))
     ) {
       await onLog(
         "stdout",
-        `[paperclip] Claude resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
+        `[paperclip] Claude resume session "${sessionId}" failed during replay; retrying with a fresh session.\n`,
       );
       const retry = await runAttempt(null);
       return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
+    }
+
+    // Kimi K2.6 fallback on Claude usage-limit / transient upstream errors.
+    // Spawns the `kimi` CLI directly (NOT env-swapping the claude CLI, because
+    // claude CLI v2.1.150+ does client-side model-list validation against the
+    // configured base URL and rejects Kimi model ids). The kimi CLI handles its
+    // own auth via ~/.kimi/config.toml on the host, mirroring how claude reads
+    // ~/.claude/.
+    const kimiFallback = readKimiFallbackConfig(config);
+    if (kimiFallback?.enabled) {
+      const initialParsedNonNull = initial.parsed ?? {};
+      const initialFailed =
+        (initial.proc.exitCode ?? 0) !== 0 ||
+        asBoolean(initialParsedNonNull.is_error, false);
+      const initialErrorMessage = initialFailed
+        ? describeClaudeFailure(initialParsedNonNull) ?? ""
+        : "";
+      const isTransientUpstream =
+        initialFailed &&
+        isClaudeTransientUpstreamError({
+          parsed: initialParsedNonNull,
+          stdout: initial.proc.stdout,
+          stderr: initial.proc.stderr,
+          errorMessage: initialErrorMessage,
+        });
+      if (isTransientUpstream) {
+        await onLog(
+          "stdout",
+          `[paperclip] Claude transient/quota error (${initialErrorMessage || "no message"}) - retrying once with Kimi fallback (${describeKimiFallback(kimiFallback)}).\n`,
+        );
+        // Build an env clean of all ANTHROPIC_* / CLAUDE_* leakage so the kimi CLI
+        // sees a fresh provider context. Keep PATH and PAPERCLIP_* runtime vars.
+        const fallbackEnv: Record<string, string> = {};
+        for (const [k, v] of Object.entries(env)) {
+          if (k.startsWith("ANTHROPIC_")) continue;
+          if (k.startsWith("CLAUDE_")) continue;
+          if (typeof v === "string" && v.length > 0) fallbackEnv[k] = v;
+        }
+        const fallbackArgs = buildKimiFallbackArgs(kimiFallback);
+        // Use the Kimi-specific timeout, NOT claude's inherited timeoutSec.
+        // Kimi CLI has been observed to hang silently in heartbeat context
+        // (sockets open, 0% CPU, no network) and was inheriting claude's
+        // timeoutSec=0 (unlimited). Default cap is 300s; override via
+        // adapterConfig.fallback.timeoutSec.
+        const fallbackProc = await runAdapterExecutionTargetProcess(
+          runId,
+          runtimeExecutionTarget,
+          kimiFallback.command,
+          fallbackArgs,
+          {
+            cwd,
+            env: fallbackEnv,
+            stdin: prompt,
+            timeoutSec: kimiFallback.timeoutSec,
+            graceSec,
+            onSpawn,
+            onLog,
+          },
+        );
+        const fallbackParsed = parseKimiStreamJson(
+          (fallbackProc.stdout ?? "") + "\n" + (fallbackProc.stderr ?? ""),
+        );
+        // Build a minimal AdapterExecutionResult tagged for Moonshot/Kimi billing.
+        // We intentionally do not attempt full claude-result parity; the fallback
+        // is a degraded mode optimised for "get the company unstuck" not parity.
+        const fallbackUsage = {
+          fallbackUsed: "moonshot_kimi" as const,
+          fallbackTriggeredByError: initialErrorMessage || null,
+          fallbackSessionId: fallbackParsed.sessionId,
+          inputTokens: 0,
+          outputTokens: 0,
+        };
+        const fallbackExitCode = fallbackProc.exitCode ?? 0;
+        const fallbackFailed =
+          fallbackExitCode !== 0 || fallbackParsed.errorMessage !== null;
+        return {
+          exitCode: fallbackProc.exitCode,
+          signal: fallbackProc.signal,
+          timedOut: false,
+          errorMessage: fallbackFailed
+            ? fallbackParsed.errorMessage ??
+              `Kimi fallback exited with code ${fallbackExitCode}`
+            : null,
+          errorCode: fallbackFailed ? "kimi_fallback_failed" : null,
+          errorFamily: null,
+          retryNotBefore: null,
+          errorMeta: undefined,
+          usage: fallbackUsage as unknown as AdapterExecutionResult["usage"],
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: fallbackParsed.sessionId,
+          provider: "moonshot",
+          biller: "moonshot",
+          model: kimiFallback.model,
+          billingType: "metered_api",
+          costUsd: 0,
+          resultJson: {
+            summary: fallbackParsed.summary,
+            fallbackUsed: "moonshot_kimi",
+            fallbackTriggeredByError: initialErrorMessage || null,
+          },
+          summary: fallbackParsed.summary,
+          clearSession: true,
+        };
+      }
     }
 
     return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });

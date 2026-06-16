@@ -88,6 +88,11 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     description: "Local multi-provider agent",
     icon: OpenCodeLogoIcon,
   },
+  kimi_local: {
+    label: "Kimi Code",
+    description: "Local Kimi agent",
+    icon: Bot,
+  },
   hermes_local: {
     label: "Hermes Agent",
     description: "Local Hermes CLI agent",
@@ -110,10 +115,11 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
   },
   openclaw_gateway: {
     label: "OpenClaw Gateway",
-    description: "Invoke OpenClaw via gateway protocol",
+    description: "External gateway adapter",
     icon: Bot,
     comingSoon: true,
-    disabledLabel: "Configure OpenClaw within the App",
+    disabledLabel: "Invite external agents from the add-agent modal",
+    hideFromVisualSelection: true,
   },
   process: {
     label: "Process",

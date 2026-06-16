@@ -47,6 +47,7 @@ const watchedDirectories = [
   "packages/adapter-utils",
   "packages/adapters",
   "packages/db",
+  "packages/skills-catalog",
   "packages/plugins/sdk",
   "packages/shared",
 ].map((relativePath) => path.join(repoRoot, relativePath));
@@ -503,6 +504,13 @@ async function maybePreflightMigrations(options: { interactive?: boolean; autoAp
       );
       process.exit(1);
     }
+    return;
+  }
+
+  if (process.platform === "win32") {
+    console.log(
+      `[paperclip] Pending migrations detected (${formatPendingMigrationSummary(pendingMigrations)}). Deferring to server startup on Windows to avoid embedded-postgres stop() hang.`,
+    );
     return;
   }
 

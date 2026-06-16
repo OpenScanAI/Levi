@@ -338,6 +338,21 @@ export function joinPromptSections(
     .join(separator);
 }
 
+/**
+ * Extract memory context from adapter execution context.
+ * Returns formatted memory block if present, empty string otherwise.
+ */
+export function extractMemoryContext(context: Record<string, unknown>): string {
+  const memoryContext = asString(context.paperclipMemoryContext, "").trim();
+  if (!memoryContext) return "";
+  return [
+    "## Previous Memory Context",
+    "The following memories were retrieved from previous agent sessions. Use them to inform your decisions and maintain continuity with past work.",
+    "",
+    memoryContext,
+  ].join("\n");
+}
+
 type PaperclipWakeIssue = {
   id: string | null;
   identifier: string | null;

@@ -21,6 +21,7 @@ import {
   renderPaperclipWakePrompt,
   renderTemplate,
   stringifyPaperclipWakePayload,
+  extractMemoryContext,
 } from "@paperclipai/adapter-utils/server-utils";
 
 type CursorCloudSession = {
@@ -399,7 +400,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? ""
       : renderTemplate(promptTemplate, templateData).trim();
   const paperclipEnvNote = renderPaperclipEnvNote(remoteEnv);
+  const memoryContext = extractMemoryContext(context);
   const prompt = joinPromptSections([
+    memoryContext,
     instructions.prefix,
     renderedBootstrapPrompt,
     wakePrompt,

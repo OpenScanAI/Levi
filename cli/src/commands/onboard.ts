@@ -614,6 +614,10 @@ export async function onboard(opts: OnboardOptions): Promise<void> {
     telemetry: {
       enabled: true,
     },
+    memory: {
+      enabled: false,
+      autoStart: true,
+    },
     storage,
     secrets,
   };

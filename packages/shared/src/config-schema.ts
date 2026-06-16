@@ -103,6 +103,14 @@ export const telemetryConfigSchema = z.object({
   enabled: z.boolean().default(true),
 }).default({});
 
+export const memoryConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  baseUrl: z.string().optional(),
+  autoStart: z.boolean().default(true),
+  backend: z.enum(["native", "agentmemory"]).default("native"),
+  secret: z.string().optional(),
+}).default({});
+
 export const paperclipConfigSchema = z
   .object({
     $meta: configMetaSchema,
@@ -111,6 +119,7 @@ export const paperclipConfigSchema = z
     logging: loggingConfigSchema,
     server: serverConfigSchema,
     telemetry: telemetryConfigSchema,
+    memory: memoryConfigSchema,
     auth: authConfigSchema.default({
       baseUrlMode: "auto",
       disableSignUp: false,

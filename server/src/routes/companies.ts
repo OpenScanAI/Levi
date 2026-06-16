@@ -25,10 +25,11 @@ import {
   logActivity,
 } from "../services/index.js";
 import type { StorageService } from "../storage/types.js";
+import type { MemoryLifecycle } from "../memory/MemoryLifecycle.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import { COMPANY_IMPORT_ROUTE_PATH } from "./company-import-paths.js";
 
-export function companyRoutes(db: Db, storage?: StorageService) {
+export function companyRoutes(db: Db, storage?: StorageService, opts?: { memoryLifecycle?: MemoryLifecycle }) {
   const router = Router();
   const svc = companyService(db);
   const agents = agentService(db);
@@ -36,6 +37,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const access = accessService(db);
   const budgets = budgetService(db);
   const feedback = feedbackService(db);
+  const memoryLifecycle = opts?.memoryLifecycle;
   const importJobs = new Map<string, ImportJobRecord>();
   const importJobTerminalRetentionMs = 5 * 60 * 1000;
 
@@ -436,6 +438,10 @@ export function companyRoutes(db: Db, storage?: StorageService) {
     if (!company) {
       res.status(404).json({ error: "Company not found" });
       return;
+    }
+    if (memoryLifecycle) {
+      const actor = getActorInfo(req);
+      await memoryLifecycle.onCompanyDeleted({ companyId, actorId: actor.actorId });
     }
     res.json({ ok: true });
   });

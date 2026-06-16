@@ -1096,10 +1096,17 @@ async function emitRuntimeEvent(ctx: AdapterExecutionContext, event: AcpRuntimeE
     return;
   }
   if (event.type === "tool_call") {
+    if (!event.toolCallId) {
+      await emitAcpxLog(ctx, {
+        type: "acpx.error",
+        message: "tool_call event missing toolCallId; generating fallback id",
+        code: "missing_tool_call_id",
+      });
+    }
     await emitAcpxLog(ctx, {
       type: "acpx.tool_call",
       name: event.title ?? "acp_tool",
-      toolCallId: event.toolCallId,
+      toolCallId: event.toolCallId || `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       status: event.status,
       text: event.text,
       tag: event.tag,

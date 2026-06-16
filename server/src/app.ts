@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler } from "./middleware/index.js";
+import { httpLogger, errorHandler, createRateLimiter } from "./middleware/index.js";
+import type { RateLimiter } from "./middleware/rate-limiter.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -139,6 +140,7 @@ export async function createApp(
     pluginWorkerManager?: PluginWorkerManager;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
+    rateLimiter?: RateLimiter;
   },
 ) {
   const app = express();
@@ -190,7 +192,8 @@ export async function createApp(
 
   // Mount API routes
   const api = Router();
-  api.use(boardMutationGuard());
+  // Health routes are mounted before rate limiting so they can be used for load balancer health checks
+  // The health route itself implements auth-based detail exposure
   api.use(
     "/health",
     healthRoutes(db, {
@@ -200,6 +203,11 @@ export async function createApp(
       companyDeletionEnabled: opts.companyDeletionEnabled,
     }),
   );
+  // Apply rate limiting to all other API routes
+  if (opts.rateLimiter) {
+    api.use(opts.rateLimiter.middleware());
+  }
+  api.use(boardMutationGuard());
   api.use("/companies", companyRoutes(db, opts.storageService, { memoryLifecycle }));
   api.use(companySkillRoutes(db));
   api.use(agentRoutes(db, { pluginWorkerManager: workerManager }));

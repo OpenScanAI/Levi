@@ -1104,6 +1104,8 @@ export {
   storageS3ConfigSchema,
   secretsLocalEncryptedConfigSchema,
   telemetryConfigSchema,
+  redisConfigSchema,
+  rateLimitingConfigSchema,
   type TelemetryConfig,
   type PaperclipConfig,
   type LlmConfig,
@@ -1118,6 +1120,8 @@ export {
   type SecretsConfig,
   type SecretsLocalEncryptedConfig,
   type ConfigMeta,
+  type RedisConfig,
+  type RateLimitingConfig,
 } from "./config-schema.js";
 
 export {

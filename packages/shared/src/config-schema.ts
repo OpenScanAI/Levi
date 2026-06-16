@@ -111,6 +111,15 @@ export const memoryConfigSchema = z.object({
   secret: z.string().optional(),
 }).default({});
 
+export const redisConfigSchema = z.object({
+  url: z.string().optional(),
+}).optional();
+
+export const rateLimitingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  failOpen: z.boolean().default(true),
+}).optional();
+
 export const paperclipConfigSchema = z
   .object({
     $meta: configMetaSchema,
@@ -143,6 +152,8 @@ export const paperclipConfigSchema = z
         keyFilePath: "~/.paperclip/instances/default/secrets/master.key",
       },
     }),
+    redis: redisConfigSchema,
+    rateLimiting: rateLimitingConfigSchema,
   })
   .superRefine((value, ctx) => {
     if (value.server.deploymentMode === "local_trusted" && value.server.exposure !== "private") {
@@ -206,3 +217,5 @@ export type AuthConfig = z.infer<typeof authConfigSchema>;
 export type TelemetryConfig = z.infer<typeof telemetryConfigSchema>;
 export type ConfigMeta = z.infer<typeof configMetaSchema>;
 export type DatabaseBackupConfig = z.infer<typeof databaseBackupConfigSchema>;
+export type RedisConfig = z.infer<typeof redisConfigSchema>;
+export type RateLimitingConfig = z.infer<typeof rateLimitingConfigSchema>;

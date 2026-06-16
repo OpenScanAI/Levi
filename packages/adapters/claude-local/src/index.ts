@@ -6,6 +6,7 @@ export const label = "Claude Code (local)";
 export const SANDBOX_INSTALL_COMMAND = "npm install -g @anthropic-ai/claude-code";
 
 export const models = [
+  { id: "claude-opus-4-8", label: "Claude Opus 4.8" },
   { id: "claude-opus-4-7", label: "Claude Opus 4.7" },
   { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
@@ -52,4 +53,5 @@ Operational fields:
 
 Notes:
 - When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
+- Repeated agent instructions and Paperclip skills are materialized into a company-scoped, content-addressed prompt bundle under the Paperclip instance. Claude usage telemetry exposes prompt-cache hits as usage.cachedInputTokens and cost ledger cached input tokens.
 `;

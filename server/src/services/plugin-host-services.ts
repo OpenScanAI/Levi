@@ -485,7 +485,14 @@ export function buildHostServices(
   const registry = pluginRegistryService(db);
   const stateStore = pluginStateStore(db);
   const pluginDb = pluginDatabaseService(db);
-  const secretsHandler = createPluginSecretsHandler({ db, pluginId });
+  const secretsHandler = createPluginSecretsHandler({
+    db,
+    pluginId,
+    getConfig: async () => {
+      const configRow = await registry.getConfig(pluginId);
+      return configRow?.configJson ?? null;
+    },
+  });
   const companies = companyService(db);
   const agents = agentService(db);
   const managedAgents = pluginManagedAgentService(db, {

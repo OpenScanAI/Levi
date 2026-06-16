@@ -100,11 +100,10 @@ export class RateLimiter {
 
     // Heartbeat endpoints: agent heartbeat invoke, heartbeat runs, scheduler heartbeats
     if (
-      path.includes("/agents/") && path.includes("/heartbeat") ||
+      (path.includes("/agents/") && path.includes("/heartbeat")) ||
       path.includes("/heartbeat-runs") ||
       path.includes("/scheduler-heartbeats") ||
-      path === "/health" ||
-      path.startsWith("/health/")
+      path.includes("/health")
     ) {
       return "heartbeat";
     }

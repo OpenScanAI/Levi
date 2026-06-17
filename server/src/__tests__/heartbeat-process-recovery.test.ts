@@ -1507,7 +1507,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     expect(activity.some((event) => event.action === "issue.successful_run_handoff_required")).toBe(true);
   });
 
-  it("requeues a missing-disposition handoff when the previous corrective wake was cancelled", async () => {
+  it("does not requeue a missing-disposition handoff when the previous corrective wake was cancelled", async () => {
     const { companyId, agentId, runId, issueId } = await seedQueuedIssueRunFixture();
     const idempotencyKey = `finish_successful_run_handoff:${issueId}:${runId}:1`;
     await db.insert(agentWakeupRequests).values({
@@ -1551,20 +1551,16 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
 
     await heartbeat.resumeQueuedRuns();
     await waitForRunToSettle(heartbeat, runId, 5_000);
-
-    const handoffWakeups = await waitForValue(async () => {
-      const rows = await db
-        .select()
-        .from(agentWakeupRequests)
-        .where(eq(agentWakeupRequests.idempotencyKey, idempotencyKey));
-      const requeued = rows.filter((wakeup) => wakeup.reason === "finish_successful_run_handoff");
-      return requeued.length > 1 ? requeued : null;
-    }, 5_000);
     await waitForHeartbeatIdle(db, 5_000);
 
-    expect(handoffWakeups).toHaveLength(2);
-    expect(handoffWakeups.filter((wakeup) => wakeup.status === "cancelled")).toHaveLength(1);
-    expect(handoffWakeups.some((wakeup) => wakeup.status !== "cancelled")).toBe(true);
+    const handoffWakeups = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.idempotencyKey, idempotencyKey));
+    
+    // With the fix, cancelled wakes are idempotent — no duplicate should be created
+    expect(handoffWakeups).toHaveLength(1);
+    expect(handoffWakeups[0].status).toBe("cancelled");
   });
 
   it("queues one missing-disposition handoff for artifact-producing successful runs left in progress", async () => {

@@ -353,6 +353,7 @@ export const PROJECT_STATUSES = [
   "in_progress",
   "completed",
   "cancelled",
+  "archived",
 ] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 

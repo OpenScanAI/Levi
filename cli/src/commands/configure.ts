@@ -67,6 +67,10 @@ function defaultConfig(): PaperclipConfig {
     telemetry: {
       enabled: true,
     },
+    memory: {
+      enabled: false,
+      autoStart: true,
+    },
     storage: defaultStorageConfig(),
     secrets: defaultSecretsConfig(),
   };

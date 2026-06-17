@@ -34,17 +34,19 @@ import { appendWithCap } from "../adapters/utils.js";
 import { assertEnvironmentSelectionForCompany } from "./environment-selection.js";
 import { environmentService } from "../services/environments.js";
 import { secretService } from "../services/secrets.js";
+import type { MemoryLifecycle } from "../memory/MemoryLifecycle.js";
 
 const WORKSPACE_CONTROL_OUTPUT_MAX_CHARS = 256 * 1024;
 const SHARED_WORKSPACE_STOP_AND_RESTART_ACTIONS = new Set(["stop", "restart"]);
 
-export function projectRoutes(db: Db) {
+export function projectRoutes(db: Db, opts?: { memoryLifecycle?: MemoryLifecycle }) {
   const router = Router();
   const svc = projectService(db);
   const secretsSvc = secretService(db);
   const workspaceOperations = workspaceOperationService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
   const environmentsSvc = environmentService(db);
+  const memoryLifecycle = opts?.memoryLifecycle;
 
   async function assertProjectEnvironmentSelection(companyId: string, environmentId: string | null | undefined) {
     if (environmentId === undefined || environmentId === null) return;
@@ -237,6 +239,70 @@ export function projectRoutes(db: Db) {
           body.env && typeof body.env === "object" && !Array.isArray(body.env)
             ? Object.keys(body.env as Record<string, unknown>).sort()
             : undefined,
+      },
+    });
+
+    res.json(project);
+  });
+
+  router.post("/projects/:id/archive", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const project = await svc.update(id, { status: "archived", archivedAt: new Date() });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.archived",
+      entityType: "project",
+      entityId: project.id,
+      details: {
+        previousStatus: existing.status,
+      },
+    });
+
+    res.json(project);
+  });
+
+  router.post("/projects/:id/unarchive", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const project = await svc.update(id, { status: "active", archivedAt: null });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId: project.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      action: "project.unarchived",
+      entityType: "project",
+      entityId: project.id,
+      details: {
+        previousStatus: existing.status,
       },
     });
 
@@ -665,6 +731,13 @@ export function projectRoutes(db: Db) {
     }
 
     const actor = getActorInfo(req);
+    if (memoryLifecycle) {
+      await memoryLifecycle.onProjectDeleted({
+        companyId: project.companyId,
+        projectId: project.id,
+        actorId: actor.actorId,
+      });
+    }
     await logActivity(db, {
       companyId: project.companyId,
       actorType: actor.actorType,

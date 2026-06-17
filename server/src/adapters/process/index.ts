@@ -7,6 +7,7 @@ export const processAdapter: ServerAdapterModule = {
   execute,
   testEnvironment,
   models: [],
+  supportsLocalAgentJwt: true,
   agentConfigurationDoc: `# process agent configuration
 
 Adapter: process
@@ -20,5 +21,9 @@ Core fields:
 Operational fields:
 - timeoutSec (number, optional): run timeout in seconds
 - graceSec (number, optional): SIGTERM grace period in seconds
+
+Environment:
+- PAPERCLIP_API_URL is auto-injected
+- PAPERCLIP_API_KEY is auto-injected when supportsLocalAgentJwt is enabled
 `,
 };

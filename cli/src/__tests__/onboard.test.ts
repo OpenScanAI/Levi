@@ -49,6 +49,10 @@ function createExistingConfigFixture() {
     telemetry: {
       enabled: true,
     },
+    memory: {
+      enabled: false,
+      autoStart: true,
+    },
     storage: {
       provider: "local_disk",
       localDisk: {

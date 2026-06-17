@@ -193,6 +193,39 @@ describe("project env routes", () => {
     );
   });
 
+  it("archives a project and logs activity", async () => {
+    mockProjectService.getById.mockResolvedValue(buildProject({ status: "in_progress" }));
+    mockProjectService.update.mockResolvedValue(buildProject({ status: "archived", archivedAt: new Date() }));
+
+    const app = await createApp();
+    const res = await request(app).post("/api/projects/project-1/archive");
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockProjectService.update).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({ status: "archived", archivedAt: expect.any(Date) }),
+    );
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: "project.archived",
+        entityType: "project",
+        entityId: "project-1",
+        details: expect.objectContaining({ previousStatus: "in_progress" }),
+      }),
+    );
+  });
+
+  it("returns 404 when archiving a missing project", async () => {
+    mockProjectService.getById.mockResolvedValue(null);
+
+    const app = await createApp();
+    const res = await request(app).post("/api/projects/missing-project/archive");
+
+    expect(res.status).toBe(404);
+    expect(mockProjectService.update).not.toHaveBeenCalled();
+  });
+
   it("normalizes env bindings on update and avoids logging raw values", async () => {
     const normalizedEnv = {
       PLAIN_KEY: { type: "plain", value: "top-secret" },

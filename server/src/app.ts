@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { StorageService } from "./storage/types.js";
-import { httpLogger, errorHandler } from "./middleware/index.js";
+import { httpLogger, errorHandler, createRateLimiter } from "./middleware/index.js";
+import type { RateLimiter } from "./middleware/rate-limiter.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -41,11 +42,17 @@ import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
+import { memoryRoutes } from "./routes/memory.js";
+import { codeScannerRoutes } from "./routes/code-scanner.js";
+import { codeScannerService } from "./services/code-scanner.js";
 import { runningProcesses, signalRunningProcess } from "./adapters/utils.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
+import { createMemoryService, type MemoryService } from "./memory/MemoryService.js";
+import { createAgentMemoryClient } from "./memory/AgentMemoryClient.js";
+import { createMemoryLifecycle } from "./memory/MemoryLifecycle.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createPluginJobScheduler } from "./services/plugin-job-scheduler.js";
@@ -128,6 +135,8 @@ export async function createApp(
     uiMode: UiMode;
     serverPort: number;
     storageService: StorageService;
+    memoryConfig?: { enabled: boolean; baseUrl?: string; autoStart?: boolean; backend?: "native" | "agentmemory"; secret?: string };
+    memoryService?: MemoryService;
     feedbackExportService?: {
       flushPendingFeedbackTraces(input?: {
         companyId?: string;
@@ -150,6 +159,7 @@ export async function createApp(
     pluginWorkerManager?: PluginWorkerManager;
     betterAuthHandler?: express.RequestHandler;
     resolveSession?: (req: ExpressRequest) => Promise<BetterAuthSessionResult | null>;
+    rateLimiter?: RateLimiter;
   },
 ) {
   const app = express();
@@ -195,10 +205,18 @@ export async function createApp(
 
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = opts.pluginWorkerManager ?? createPluginWorkerManager();
+  const memoryConfig = opts.memoryConfig ?? { enabled: false };
+  const memoryService = opts.memoryService ?? (
+    memoryConfig.backend === "agentmemory"
+      ? createAgentMemoryClient(memoryConfig)
+      : createMemoryService(memoryConfig)
+  );
+  const memoryLifecycle = createMemoryLifecycle(memoryService);
 
   // Mount API routes
   const api = Router();
-  api.use(boardMutationGuard());
+  // Health routes are mounted before rate limiting so they can be used for load balancer health checks
+  // The health route itself implements auth-based detail exposure
   api.use(
     "/health",
     healthRoutes(db, {
@@ -208,11 +226,16 @@ export async function createApp(
       companyDeletionEnabled: opts.companyDeletionEnabled,
     }),
   );
-  api.use("/companies", companyRoutes(db, opts.storageService));
+  // Apply rate limiting to all other API routes
+  if (opts.rateLimiter) {
+    api.use(opts.rateLimiter.middleware());
+  }
+  api.use(boardMutationGuard());
+  api.use("/companies", companyRoutes(db, opts.storageService, { memoryLifecycle }));
   api.use(companySkillRoutes(db));
   api.use(agentRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(assetRoutes(db, opts.storageService));
-  api.use(projectRoutes(db));
+  api.use(projectRoutes(db, { memoryLifecycle }));
   api.use(issueRoutes(db, opts.storageService, {
     feedbackExportService: opts.feedbackExportService,
     pluginWorkerManager: workerManager,
@@ -233,6 +256,9 @@ export async function createApp(
   api.use(resourceMembershipRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
+  api.use(memoryRoutes({ db, memoryService }));
+  const codeScanner = codeScannerService(db);
+  api.use("/code-scanner", codeScannerRoutes(codeScanner));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -426,6 +452,7 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  codeScanner.start();
   let feedbackExportShuttingDown = false;
   let feedbackExportTimer: ReturnType<typeof setInterval> | null = null;
   const disableFeedbackExportFlushes = () => {
@@ -482,6 +509,8 @@ export async function createApp(
     disableFeedbackExportFlushes();
     devWatcher?.close();
     viteHtmlRenderer?.dispose();
+    memoryService.shutdown();
+    codeScanner.stop();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
     for (const running of runningProcesses.values()) {

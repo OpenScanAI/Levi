@@ -52,6 +52,38 @@ INFO: Redis connected for rate limiting {"redisUrl":"redis://localhost:6379"}
 INFO: Rate limiting enabled {"failOpen":true}
 ```
 
+## Test 4: Load Testing (Concurrent Requests)
+
+### Test 4a: 500 requests, 50 concurrent users
+```bash
+ab -n 500 -c 50 http://127.0.0.1:3100/api/companies
+```
+Results:
+- 300 requests → 200 OK
+- 200 requests → 429 Too Many Requests
+- Requests per second: 3,595
+- Average response time: 13.9ms
+
+### Test 4b: 1000 requests, 100 concurrent users (after window reset)
+```bash
+ab -n 1000 -c 100 http://127.0.0.1:3100/api/companies
+```
+Results:
+- 300 requests → 200 OK
+- 700 requests → 429 Too Many Requests
+- Requests per second: 11,904
+- Average response time: 8.4ms
+
+### Test 4c: 500 requests, 50 concurrent users (after 45s window reset)
+```bash
+ab -n 500 -c 50 http://127.0.0.1:3100/api/companies
+```
+Results:
+- 300 requests → 200 OK
+- 200 requests → 429 Too Many Requests
+- Requests per second: 4,711
+- Average response time: 10.6ms
+
 ## Summary
 All rate limiting features working correctly:
 - Redis backend active
@@ -59,3 +91,6 @@ All rate limiting features working correctly:
 - 429 returned after limit exceeded
 - Error message includes tier and limit details
 - Health endpoint exempt from rate limiting
+- **Rate limiting works under heavy concurrent load (up to 100 concurrent users)**
+- **No server crashes or performance degradation under load**
+- **Redis window expiration works correctly (60-second window resets)**

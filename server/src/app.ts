@@ -43,6 +43,8 @@ import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { memoryRoutes } from "./routes/memory.js";
+import { codeScannerRoutes } from "./routes/code-scanner.js";
+import { codeScannerService } from "./services/code-scanner.js";
 import { runningProcesses, signalRunningProcess } from "./adapters/utils.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
@@ -255,6 +257,8 @@ export async function createApp(
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
   api.use(memoryRoutes({ db, memoryService }));
+  const codeScanner = codeScannerService(db);
+  api.use("/code-scanner", codeScannerRoutes(codeScanner));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -448,6 +452,7 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  codeScanner.start();
   let feedbackExportShuttingDown = false;
   let feedbackExportTimer: ReturnType<typeof setInterval> | null = null;
   const disableFeedbackExportFlushes = () => {
@@ -505,6 +510,7 @@ export async function createApp(
     devWatcher?.close();
     viteHtmlRenderer?.dispose();
     memoryService.shutdown();
+    codeScanner.stop();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
     for (const running of runningProcesses.values()) {

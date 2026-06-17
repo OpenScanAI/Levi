@@ -57,6 +57,25 @@ const generalWorkspacesBGroupName = "general-workspaces-b";
 const generalWorkspacesAProjects = ["@paperclipai/ui", "paperclipai"];
 const generalWorkspacesBProjects = nonServerProjects.filter((project) => !generalWorkspacesAProjects.includes(project));
 const generalGroupNames = [generalServerGroupName, generalWorkspacesAGroupName, generalWorkspacesBGroupName];
+const projectPathMappings = [
+  { prefix: "server/", project: "@paperclipai/server" },
+  { prefix: "ui/", project: "@paperclipai/ui" },
+  { prefix: "cli/", project: "paperclipai" },
+  { prefix: "packages/shared/", project: "@paperclipai/shared" },
+  { prefix: "packages/db/", project: "@paperclipai/db" },
+  { prefix: "packages/adapter-utils/", project: "@paperclipai/adapter-utils" },
+  { prefix: "packages/adapters/acpx-local/", project: "@paperclipai/adapter-acpx-local" },
+  { prefix: "packages/adapters/claude-local/", project: "@paperclipai/adapter-claude-local" },
+  { prefix: "packages/adapters/codex-local/", project: "@paperclipai/adapter-codex-local" },
+  { prefix: "packages/adapters/cursor-cloud/", project: "@paperclipai/adapter-cursor-cloud" },
+  { prefix: "packages/adapters/cursor-local/", project: "@paperclipai/adapter-cursor-local" },
+  { prefix: "packages/adapters/gemini-local/", project: "@paperclipai/adapter-gemini-local" },
+  { prefix: "packages/adapters/grok-local/", project: "@paperclipai/adapter-grok-local" },
+  { prefix: "packages/adapters/opencode-local/", project: "@paperclipai/adapter-opencode-local" },
+  { prefix: "packages/adapters/pi-local/", project: "@paperclipai/adapter-pi-local" },
+  { prefix: "packages/adapters/openclaw-gateway/", project: "@paperclipai/adapter-openclaw-gateway" },
+  { prefix: "packages/plugins/sdk/", project: "@paperclipai/plugin-sdk" },
+];
 const serializedServerVitestArgs = [
   "--no-file-parallelism",
   "--maxWorkers=1",
@@ -132,6 +151,7 @@ function parseCliOptions(argv) {
   let shardCount = null;
   let group = null;
   let dryRun = false;
+  const targets = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -188,6 +208,11 @@ function parseCliOptions(argv) {
       continue;
     }
 
+    if (!arg.startsWith("-")) {
+      targets.push(arg);
+      continue;
+    }
+
     fail(`Unknown argument "${arg}".`);
   }
 
@@ -224,6 +249,7 @@ function parseCliOptions(argv) {
       shardCount: resolvedShardCount,
       group: null,
       dryRun,
+      targets,
     };
   }
 
@@ -233,7 +259,42 @@ function parseCliOptions(argv) {
     shardCount: null,
     group,
     dryRun,
+    targets,
   };
+}
+
+function normalizeTargetPath(target) {
+  const resolved = path.isAbsolute(target) ? target : path.resolve(repoRoot, target);
+  const relative = path.relative(repoRoot, resolved);
+  if (!relative || relative.startsWith("..")) {
+    return target.split(path.sep).join("/");
+  }
+  return relative.split(path.sep).join("/");
+}
+
+function resolveProjectForTargets(targets) {
+  const projects = new Set();
+  for (const target of targets) {
+    const normalized = normalizeTargetPath(target);
+    for (const entry of projectPathMappings) {
+      const prefix = entry.prefix;
+      const exact = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+      if (normalized === exact || normalized.startsWith(prefix)) {
+        projects.add(entry.project);
+        break;
+      }
+    }
+  }
+
+  if (projects.size === 0) {
+    return null;
+  }
+
+  if (projects.size > 1) {
+    fail(`Targets span multiple projects: ${Array.from(projects).join(", ")}`);
+  }
+
+  return Array.from(projects)[0];
 }
 
 function selectSerializedSuites(routeTests, shardIndex, shardCount) {
@@ -338,6 +399,19 @@ const routeTests = walk(serverTestsDir)
   .sort((a, b) => a.repoPath.localeCompare(b.repoPath));
 
 const options = parseCliOptions(process.argv.slice(2));
+if (options.targets.length > 0) {
+  const project = resolveProjectForTargets(options.targets);
+  if (!project) {
+    fail("No matching Vitest project for provided target paths.");
+  }
+  const targets = options.targets.map((target) => normalizeTargetPath(target));
+  if (options.dryRun) {
+    console.log(JSON.stringify({ mode: "targeted", project, targets }, null, 2));
+    process.exit(0);
+  }
+  runVitest(["--project", project, ...targets], `targeted ${project} run`);
+  process.exit(0);
+}
 if (options.dryRun) {
   const serializedSuites =
     options.mode === serializedModeName

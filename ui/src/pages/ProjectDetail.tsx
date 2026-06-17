@@ -31,15 +31,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
-import {
-  resourceMembershipState,
-  useResourceMembershipMutation,
-  useResourceMemberships,
-} from "../hooks/useResourceMemberships";
 
 /* ── Top-level tab types ── */
 
-type ProjectBaseTab = "overview" | "list" | "plugin-operations" | "workspaces" | "configuration" | "budget";
+type ProjectBaseTab = "overview" | "list" | "plugin-operations" | "workspaces" | "configuration" | "budget" | "memory";
 type ProjectPluginTab = `plugin:${string}`;
 type ProjectTab = ProjectBaseTab | ProjectPluginTab;
 
@@ -58,6 +53,7 @@ function resolveProjectTab(pathname: string, projectId: string): ProjectTab | nu
   if (tab === "issues") return "list";
   if (tab === "plugin-operations") return "plugin-operations";
   if (tab === "workspaces") return "workspaces";
+  if (tab === "memory") return "memory";
   return null;
 }
 
@@ -346,6 +342,7 @@ export function ProjectDetail() {
   );
   const activePluginTab = pluginTabItems.find((item) => item.value === activeTab) ?? null;
   const isolatedWorkspacesEnabled = experimentalSettingsQuery.data?.enableIsolatedWorkspaces === true;
+  const memoryViewerEnabled = experimentalSettingsQuery.data?.enableMemoryViewer === true;
   const workspaceTabProjectId = project?.id ?? null;
   const { data: workspaceTabIssues = [], isLoading: isWorkspaceTabIssuesLoading, error: workspaceTabIssuesError } = useQuery({
     queryKey: workspaceTabProjectId && resolvedCompanyId
@@ -469,7 +466,11 @@ export function ProjectDetail() {
       return;
     }
     if (activeTab === "workspaces") {
-      navigate(`/projects/${canonicalProjectRef}/workspaces`, { replace: true });
+      navigate(`/projects/${canonicalProjectRef}/workspaces`);
+      return;
+    }
+    if (activeTab === "memory") {
+      navigate(`/projects/${canonicalProjectRef}/memory`);
       return;
     }
     if (activeTab === "list") {
@@ -596,6 +597,10 @@ export function ProjectDetail() {
     return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
   }
 
+  if (activeTab === "memory" && !memoryViewerEnabled) {
+    return <Navigate to={`/projects/${canonicalProjectRef}/issues`} replace />;
+  }
+
   // Redirect bare /projects/:id to cached tab or default /issues
   if (routeProjectRef && activeTab === null) {
     let cachedTab: string | null = null;
@@ -616,6 +621,9 @@ export function ProjectDetail() {
     }
     if (cachedTab === "workspaces" && workspaceTabDecisionLoaded && showWorkspacesTab) {
       return <Navigate to={`/projects/${canonicalProjectRef}/workspaces`} replace />;
+    }
+    if (cachedTab === "memory" && memoryViewerEnabled) {
+      return <Navigate to={`/projects/${canonicalProjectRef}/memory`} replace />;
     }
     if (cachedTab === "workspaces" && !workspaceTabDecisionLoaded) {
       return <PageSkeleton variant="detail" />;
@@ -647,8 +655,10 @@ export function ProjectDetail() {
     }
     if (tab === "overview") {
       navigate(`/projects/${canonicalProjectRef}/overview`);
-    } else if (tab === "workspaces") {
-      navigate(`/projects/${canonicalProjectRef}/workspaces`);
+    } else  if (tab === "workspaces") {
+    navigate(`/projects/${canonicalProjectRef}/workspaces`);
+  } else if (tab === "memory") {
+    navigate(`/projects/${canonicalProjectRef}/memory`);
     } else if (tab === "budget") {
       navigate(`/projects/${canonicalProjectRef}/budget`);
     } else if (tab === "plugin-operations") {
@@ -763,6 +773,7 @@ export function ProjectDetail() {
             { value: "overview", label: "Overview" },
             ...(project.managedByPlugin ? [{ value: "plugin-operations", label: "Plugin operations" }] : []),
             ...(showWorkspacesTab ? [{ value: "workspaces", label: "Workspaces" }] : []),
+            ...(memoryViewerEnabled ? [{ value: "memory", label: "Memory" }] : []),
             { value: "configuration", label: "Configuration" },
             { value: "budget", label: "Budget" },
             ...pluginTabItems.map((item) => ({
@@ -839,6 +850,10 @@ export function ProjectDetail() {
           />
         </div>
       ) : null}
+
+      {activeTab === "memory" && resolvedCompanyId && project?.id && (
+        <MemoryViewer companyId={resolvedCompanyId} projectId={project.id} />
+      )}
 
       {activePluginTab && (
         <PluginSlotMount

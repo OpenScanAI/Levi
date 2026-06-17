@@ -5,6 +5,7 @@ import type { ServerAdapterModule } from "../adapters/index.js";
 
 const mockAgentService = vi.hoisted(() => ({
   create: vi.fn(),
+  createApiKey: vi.fn(),
   getById: vi.fn(),
 }));
 
@@ -226,6 +227,7 @@ describe("agent routes adapter validation", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
+    mockAgentService.createApiKey.mockResolvedValue({ id: "key-1", name: "auto-generated", token: "pcp_test_token", createdAt: new Date() });
     await unregisterTestAdapter("external_test");
     await unregisterTestAdapter(missingAdapterType);
   });

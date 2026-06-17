@@ -37,6 +37,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:watch": "cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx ./scripts/dev-watch.ts",
+    "memory-proxy": "tsx src/memory-server/proxy.ts",
     "prepare:ui-dist": "bash ../scripts/prepare-server-ui-dist.sh",
     "build": "tsc && mkdir -p dist/onboarding-assets && cp -R src/onboarding-assets/. dist/onboarding-assets/",
     "prepack": "pnpm run prepare:ui-dist",
@@ -74,6 +75,7 @@
     "embedded-postgres": "^18.1.0-beta.16",
     "express": "^5.1.0",
     "hermes-paperclip-adapter": "^0.2.0",
+    "ioredis": "^5.6.0",
     "jsdom": "^28.1.0",
     "multer": "^2.1.1",
     "open": "^11.0.0",

@@ -47,6 +47,10 @@ function writeBaseConfig(configPath: string) {
     telemetry: {
       enabled: true,
     },
+    memory: {
+      enabled: false,
+      autoStart: true,
+    },
     storage: {
       provider: "local_disk",
       localDisk: { baseDir: "/tmp/paperclip-storage" },

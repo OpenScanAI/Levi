@@ -35,6 +35,11 @@ const IDEMPOTENT_HANDOFF_WAKE_STATUSES = [
   "deferred_issue_execution",
   "claimed",
   "completed",
+  "skipped",
+  "coalesced",
+  "cancelled",
+  "failed",
+  "timed_out",
 ];
 const IDEMPOTENT_HANDOFF_WAKE_STATUS_SET = new Set<string>(IDEMPOTENT_HANDOFF_WAKE_STATUSES);
 

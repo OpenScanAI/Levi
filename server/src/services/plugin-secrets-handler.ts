@@ -39,6 +39,7 @@ import {
   isUuidSecretRef,
   readConfigValueAtPath,
 } from "./json-schema-secret-refs.js";
+import { secretService } from "./index.js";
 
 export const PLUGIN_SECRET_REFS_DISABLED_MESSAGE =
   "Plugin secret references are disabled until company-scoped plugin config lands";
@@ -139,6 +140,11 @@ export interface PluginSecretsHandlerOptions {
    * that reach the plugin worker.
    */
   pluginId: string;
+  /**
+   * Optional function to retrieve the plugin's current config.
+   * Used to extract company-scoped settings for secret resolution.
+   */
+  getConfig?: () => Promise<Record<string, unknown> | null>;
 }
 
 /**
@@ -226,6 +232,55 @@ export function createPluginSecretsHandler(
 
       const trimmedRef = secretRef.trim();
 
+      // ---------------------------------------------------------------
+      // 2. If getConfig is provided, try to resolve via company-scoped config
+      // ---------------------------------------------------------------
+      if (options.getConfig) {
+        const config = await options.getConfig();
+        const companyId = config?.defaultCompanyId as string | undefined;
+        
+        if (companyId) {
+          const secrets = secretService(options.db);
+          
+          // Try to resolve by UUID first
+          if (isUuidSecretRef(trimmedRef)) {
+            try {
+              const value = await secrets.resolveSecretValue(companyId, trimmedRef, "latest", {
+                consumerType: "plugin",
+                consumerId: pluginId,
+                actorType: "system",
+                actorId: null,
+                configPath: "plugin.secrets.resolve",
+              });
+              return value;
+            } catch (err: any) {
+              // If UUID resolution fails, fall through to name-based lookup
+              if (err.message?.includes("not found") || err.message?.includes("binding_missing")) {
+                // Continue to name-based lookup below
+              } else {
+                throw err;
+              }
+            }
+          }
+          
+          // Try to resolve by name (for non-UUID refs or UUIDs that don't resolve directly)
+          const secretByName = await secrets.getByName(companyId, trimmedRef);
+          if (secretByName) {
+            const value = await secrets.resolveSecretValue(companyId, secretByName.id, "latest", {
+              consumerType: "plugin",
+              consumerId: pluginId,
+              actorType: "system",
+              actorId: null,
+              configPath: "plugin.secrets.resolve",
+            });
+            return value;
+          }
+          
+          throw invalidSecretRef(trimmedRef);
+        }
+      }
+
+      // Only enforce UUID format when company-scoped resolution is not available
       if (!isUuidSecretRef(trimmedRef)) {
         throw invalidSecretRef(trimmedRef);
       }

@@ -27,6 +27,10 @@ import {
 import detectPort from "detect-port";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { readConfigFile } from "./config-file.js";
+import { createMemoryService } from "./memory/MemoryService.js";
+export { migrateHistoricalMemories, type MemoryMigrationResult } from "./memory/MemoryMigration.js";
+export { createMemoryService, type MemoryService, type MemoryServiceConfig } from "./memory/MemoryService.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
@@ -47,6 +51,8 @@ import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-
 import { maybePersistWorktreeRuntimePorts } from "./worktree-config.js";
 import { initTelemetry, getTelemetryClient } from "./telemetry.js";
 import { conflict } from "./errors.js";
+import { createRateLimiter } from "./middleware/rate-limiter.js";
+import { Redis } from "ioredis";
 import type {
   InstanceDatabaseBackupRunResult,
   InstanceDatabaseBackupTrigger,
@@ -91,6 +97,11 @@ export interface StartedServer {
 
 export async function startServer(): Promise<StartedServer> {
   let config = loadConfig();
+  const fileConfig = readConfigFile();
+  const memoryConfig = fileConfig?.memory ?? { enabled: false };
+  const memoryService = (memoryConfig as any).backend === "agentmemory"
+    ? (await import("./memory/AgentMemoryClient.js")).createAgentMemoryClient(memoryConfig as any)
+    : createMemoryService(memoryConfig);
   initTelemetry({ enabled: config.telemetryEnabled });
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
@@ -627,6 +638,25 @@ export async function startServer(): Promise<StartedServer> {
     }
   };
   const pluginWorkerManager = createPluginWorkerManager();
+
+  let rateLimiter = null;
+  if (config.rateLimitingEnabled) {
+    let redis = null;
+    if (config.redisUrl) {
+      try {
+        redis = new Redis(config.redisUrl, { maxRetriesPerRequest: 1, connectTimeout: 2000 });
+        logger.info({ redisUrl: config.redisUrl }, "Redis connected for rate limiting");
+      } catch (err) {
+        logger.warn({ err, redisUrl: config.redisUrl }, "Failed to connect to Redis, using LRU fallback");
+      }
+    }
+    rateLimiter = createRateLimiter({
+      redis: redis ?? undefined,
+      failOpen: config.rateLimitingFailOpen,
+    });
+    logger.info({ failOpen: config.rateLimitingFailOpen }, "Rate limiting enabled");
+  }
+
   const app = await createApp(db as any, {
     uiMode,
     serverPort: listenPort,
@@ -647,10 +677,13 @@ export async function startServer(): Promise<StartedServer> {
     bindHost: config.host,
     authReady,
     companyDeletionEnabled: config.companyDeletionEnabled,
+    memoryConfig,
+    memoryService,
     pluginMigrationDb: pluginMigrationDb as any,
     betterAuthHandler,
     resolveSession,
     pluginWorkerManager,
+    rateLimiter: rateLimiter ?? undefined,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 
@@ -717,7 +750,7 @@ export async function startServer(): Promise<StartedServer> {
     });
   
   if (config.heartbeatSchedulerEnabled) {
-    const heartbeat = heartbeatService(db as any, { pluginWorkerManager });
+    const heartbeat = heartbeatService(db as any, { pluginWorkerManager, memoryService });
     const routines = routineService(db as any, { pluginWorkerManager });
   
     // Reap orphaned running runs at startup while in-memory execution state is empty,

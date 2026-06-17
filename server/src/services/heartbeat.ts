@@ -51,6 +51,9 @@ import {
 } from "@paperclipai/db";
 import { conflict, HttpError, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+import { injectMemories } from "../memory/MemoryInjector.js";
+import { recordMemoryCostEvent } from "../memory/MemoryTokenCost.js";
+import type { MemoryService } from "../memory/MemoryService.js";
 import { publishLiveEvent } from "./live-events.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
@@ -2593,6 +2596,7 @@ export type HeartbeatEnvironmentRuntime = ReturnType<typeof environmentRuntimeSe
 export interface HeartbeatServiceOptions {
   pluginWorkerManager?: PluginWorkerManager;
   environmentRuntime?: HeartbeatEnvironmentRuntime;
+  memoryService?: MemoryService;
 }
 
 export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) {
@@ -7528,10 +7532,46 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       runScopedMentionedSkillKeys,
     );
     const runtimeSkillEntries = await companySkills.listRuntimeSkillEntries(agent.companyId);
-    let runtimeConfig = {
+    let runtimeConfig: Record<string, unknown> = {
       ...effectiveResolvedConfig,
       paperclipRuntimeSkills: runtimeSkillEntries,
     };
+
+    // -- Memory injection -------------------------------------------------
+    const memoryProjectId = projectContext?.id ?? issueContext?.projectId ?? contextProjectId ?? "";
+    const memoryInjection = await injectMemories({
+      memoryService: options.memoryService ?? ({ enabled: false } as MemoryService),
+      companyId: agent.companyId,
+      projectId: memoryProjectId,
+      agentId: agent.id,
+      agentRole: agent.role ?? "agent",
+      taskDescription:
+        readNonEmptyString(taskKey) ?? readNonEmptyString(context.wakeReason) ?? run.id,
+      goalAncestry: [],
+      memoryBudget: 2000,
+    });
+
+    if (!memoryInjection.skipped && memoryInjection.tokenCount > 0) {
+      void recordMemoryCostEvent(db, {
+        companyId: agent.companyId,
+        agentId: agent.id,
+        heartbeatRunId: run.id,
+        projectId: memoryProjectId || undefined,
+        tokenCount: memoryInjection.tokenCount,
+      }).catch((err) => logger.warn({ err }, "[MemoryInjector] Failed to record cost"));
+    }
+
+    if (memoryInjection.contextBlock) {
+      runtimeConfig = {
+        ...runtimeConfig,
+        env: {
+          ...parseObject(runtimeConfig.env),
+          LEVI_MEMORY_CONTEXT: memoryInjection.contextBlock,
+        },
+      };
+      // Inject memory context into adapter context so all adapters can access it
+      context.paperclipMemoryContext = memoryInjection.contextBlock;
+    }
     const workspaceOperationRecorder = workspaceOperationsSvc.createRecorder({
       companyId: agent.companyId,
       heartbeatRunId: run.id,
@@ -7740,6 +7780,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       heartbeatRunId: run.id,
       agentId: agent.id,
       persistedExecutionWorkspace,
+      taskId: readNonEmptyString(taskKey) ?? readNonEmptyString(context.wakeReason) ?? run.id,
+      agentRole: agent.role ?? "agent",
+      memoryBudget: 2000,
     });
     const selectedEnvironment = acquiredEnvironment.environment;
     let activeEnvironmentLease = {
@@ -7757,6 +7800,12 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       executionWorkspace,
       effectiveExecutionWorkspaceMode,
       persistedExecutionWorkspace,
+      memoryService: options.memoryService ?? ({ enabled: false } as MemoryService),
+      agentId: agent.id,
+      projectId: projectContext?.id ?? issueContext?.projectId ?? contextProjectId ?? "",
+      taskId: readNonEmptyString(taskKey) ?? readNonEmptyString(context.wakeReason) ?? run.id,
+      agentRole: agent.role ?? "agent",
+      memoryBudget: 2000,
     });
     activeEnvironmentLease = {
       ...activeEnvironmentLease,
@@ -8435,6 +8484,30 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           await scheduleBoundedRetryForRun(livenessRun, agent);
         }
         const issueCommentPolicyResult = await finalizeIssueCommentPolicy(livenessRun, agent);
+
+        // -- Memory capture: store run artifacts as searchable memories --
+        try {
+          const { captureMemories } = await import("../memory/MemoryCapture.js");
+          const memoryProjectId = projectContext?.id ?? issueContext?.projectId ?? contextProjectId ?? "";
+          await captureMemories({
+            memoryService: options.memoryService ?? ({ enabled: false } as MemoryService),
+            companyId: agent.companyId,
+            projectId: memoryProjectId,
+            agentId: agent.id,
+            agentRole: agent.role ?? "agent",
+            taskId: readNonEmptyString(taskKey) ?? run.id,
+            runId: run.id,
+            goalAncestry: [],
+            outcome,
+            stdout: stdoutExcerpt ?? null,
+            stderr: stderrExcerpt ?? null,
+            resultJson: persistedResultJson,
+            costUsd: typeof adapterResult.costUsd === "number" ? adapterResult.costUsd : null,
+          });
+        } catch (captureErr) {
+          logger.warn({ err: captureErr, runId: run.id }, "[MemoryCapture] Failed to capture run memories");
+        }
+
         await releaseIssueExecutionAndPromote(livenessRun);
         await handleRunLivenessContinuation(livenessRun);
         await handleSuccessfulRunHandoff(
@@ -9049,6 +9122,14 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         (run.status === "failed" || run.status === "timed_out" || run.status === "cancelled");
 
       if (!issueNeedsImmediateRecovery) {
+        // Clear task session when issue reaches terminal status to prevent
+        // infinite resume loops from handoff wakes with resumeIntent=true
+        if (issue.status === "done" || issue.status === "cancelled") {
+          await clearTaskSessions(run.companyId, run.agentId, {
+            taskKey,
+            adapterType: recoveryAgent?.adapterType,
+          });
+        }
         return { kind: "released" as const };
       }
 

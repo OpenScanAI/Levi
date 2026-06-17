@@ -225,6 +225,11 @@ export function buildWorktreeConfig(input: {
     telemetry: {
       enabled: source?.telemetry?.enabled ?? true,
     },
+    memory: {
+      enabled: source?.memory?.enabled ?? false,
+      baseUrl: source?.memory?.baseUrl,
+      autoStart: source?.memory?.autoStart ?? true,
+    },
     storage: {
       provider: source?.storage.provider ?? "local_disk",
       localDisk: {

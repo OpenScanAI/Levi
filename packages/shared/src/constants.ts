@@ -603,6 +603,11 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  "research.session.status",
+  "research.task.updated",
+  "research.finding.created",
+  "research.source.processing",
+  "research.finding.progress",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
@@ -1101,3 +1106,48 @@ export const PLUGIN_BRIDGE_ERROR_CODES = [
   "UNKNOWN",
 ] as const;
 export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Research Agent Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const RESEARCH_SESSION_STATUSES = [
+  "planning",
+  "running",
+  "cancelling",
+  "paused",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type ResearchSessionStatus = (typeof RESEARCH_SESSION_STATUSES)[number];
+
+export const RESEARCH_TASK_STATUSES = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "skipped",
+] as const;
+export type ResearchTaskStatus = (typeof RESEARCH_TASK_STATUSES)[number];
+
+export const RESEARCH_FINDING_CONFIDENCES = [
+  "high",
+  "medium",
+  "low",
+] as const;
+export type ResearchFindingConfidence = (typeof RESEARCH_FINDING_CONFIDENCES)[number];
+
+export const RESEARCH_DEPTHS = [
+  "shallow",
+  "medium",
+  "deep",
+] as const;
+export type ResearchDepth = (typeof RESEARCH_DEPTHS)[number];
+
+export const DEFAULT_RESEARCH_DEPTH: ResearchDepth = "medium";
+export const DEFAULT_RESEARCH_MAX_SUBTOPICS = 5;
+export const MIN_RESEARCH_MAX_SUBTOPICS = 1;
+export const MAX_RESEARCH_MAX_SUBTOPICS = 20;
+export const MAX_RESEARCH_QUERY_LENGTH = 2000;
+export const MAX_RESEARCH_TITLE_LENGTH = 200;

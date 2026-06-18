@@ -638,6 +638,55 @@
       "when": 1779573019125,
       "tag": "0090_resource_memberships",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1751366400000,
+      "tag": "0091_research_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1751366400001,
+      "tag": "0092_research_cancelling",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1751366400002,
+      "tag": "0093_research_report_editing",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1781247158397,
+      "tag": "0094_smart_orphan",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "95",
+      "when": 1780559427000,
+      "tag": "0095_research_cancelled_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "96",
+      "when": 1781719000000,
+      "tag": "0096_research_findings_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "97",
+      "when": 1781719500000,
+      "tag": "0097_research_depth_enum_fix",
+      "breakpoints": true
     }
   ]
 }

@@ -444,3 +444,27 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  researchSessionStatusSchema,
+  researchTaskStatusSchema,
+  researchFindingConfidenceSchema,
+  researchDepthSchema,
+  researchSourceSnippetSchema,
+  researchSubtopicSchema,
+  researchPlanSchema,
+  createResearchSessionSchema,
+  updateResearchSessionSchema,
+  createResearchTaskSchema,
+  updateResearchTaskSchema,
+  createResearchFindingSchema,
+  markDuplicateSchema,
+  createResearchMemorySchema,
+  type CreateResearchSession,
+  type UpdateResearchSession,
+  type CreateResearchTask,
+  type UpdateResearchTask,
+  type CreateResearchFinding,
+  type MarkDuplicate,
+  type CreateResearchMemory,
+} from "./research.js";

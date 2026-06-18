@@ -651,6 +651,14 @@ export async function startServer(): Promise<StartedServer> {
     betterAuthHandler,
     resolveSession,
     pluginWorkerManager,
+    researchConfig: {
+      researchEngineEnabled: config.researchEngineEnabled,
+      serperApiKey: config.serperApiKey,
+      researchLlmModel: config.researchLlmModel,
+      researchLlmApiKey: config.researchLlmApiKey,
+      researchMaxSearchResults: config.researchMaxSearchResults,
+      researchMaxFindingsPerTask: config.researchMaxFindingsPerTask,
+    },
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 

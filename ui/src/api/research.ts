@@ -85,16 +85,16 @@ export const researchApi = {
     api.delete<void>(`/companies/${companyId}/research/sessions/${sessionId}`),
 
   startSession: (companyId: string, sessionId: string) =>
-    api.post<{ started: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/start`),
+    api.post<{ started: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/start`, {}),
 
   cancelSession: (companyId: string, sessionId: string) =>
-    api.post<{ cancelled: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/cancel`),
+    api.post<{ cancelled: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/cancel`, {}),
 
   resumeSession: (companyId: string, sessionId: string) =>
-    api.post<{ resumed: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/resume`),
+    api.post<{ resumed: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/resume`, {}),
 
   retryTask: (companyId: string, sessionId: string, taskId: string) =>
-    api.post<{ retried: boolean; taskId: string; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/tasks/${taskId}/retry`),
+    api.post<{ retried: boolean; taskId: string; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/tasks/${taskId}/retry`, {}),
 
   // Tasks
   listTasks: (companyId: string, sessionId: string) =>
@@ -128,12 +128,7 @@ export const researchApi = {
   listSources: (companyId: string, sessionId: string) =>
     api.get<ResearchSource[]>(`/companies/${companyId}/research/sessions/${sessionId}/sources`),
 
-  // Engine
-  startSession: (companyId: string, sessionId: string) =>
-    api.post<{ started: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/start`, {}),
-
-  cancelSession: (companyId: string, sessionId: string) =>
-    api.post<{ cancelled: boolean; sessionId: string }>(`/companies/${companyId}/research/sessions/${sessionId}/cancel`, {}),
+  // Engine (already defined above)
 
   // Subtopic Generation
   generateSubtopics: (companyId: string, data: { query: string; depth?: string; maxSubtopics?: number }) =>

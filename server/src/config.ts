@@ -87,6 +87,14 @@ export interface Config {
   heartbeatSchedulerIntervalMs: number;
   companyDeletionEnabled: boolean;
   telemetryEnabled: boolean;
+  researchEngineEnabled: boolean;
+  serperApiKey: string | undefined;
+  semanticScholarApiKey: string | undefined;
+  researchSearchProvider: "mock" | "serper" | "semantic-scholar";
+  researchLlmModel: string;
+  researchLlmApiKey: string | undefined;
+  researchMaxSearchResults: number;
+  researchMaxFindingsPerTask: number;
 }
 
 function detectTailnetBindHost(): string | undefined {
@@ -333,5 +341,13 @@ export function loadConfig(): Config {
     heartbeatSchedulerIntervalMs: Math.max(10000, Number(process.env.HEARTBEAT_SCHEDULER_INTERVAL_MS) || 30000),
     companyDeletionEnabled,
     telemetryEnabled: fileConfig?.telemetry?.enabled ?? true,
+    researchEngineEnabled: process.env.PAPERCLIP_RESEARCH_ENGINE_ENABLED !== "false",
+    serperApiKey: process.env.SERPER_API_KEY?.trim() || undefined,
+    semanticScholarApiKey: process.env.SEMANTIC_SCHOLAR_API_KEY?.trim() || undefined,
+    researchSearchProvider: (process.env.PAPERCLIP_RESEARCH_SEARCH_PROVIDER?.trim() as Config["researchSearchProvider"]) || "mock",
+    researchLlmModel: process.env.PAPERCLIP_RESEARCH_LLM_MODEL?.trim() || "gpt-4o-mini",
+    researchLlmApiKey: process.env.PAPERCLIP_RESEARCH_LLM_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || undefined,
+    researchMaxSearchResults: Math.max(1, Math.min(50, Number(process.env.PAPERCLIP_RESEARCH_MAX_SEARCH_RESULTS) || 10)),
+    researchMaxFindingsPerTask: Math.max(1, Math.min(100, Number(process.env.PAPERCLIP_RESEARCH_MAX_FINDINGS_PER_TASK) || 20)),
   };
 }

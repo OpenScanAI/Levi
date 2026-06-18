@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BarChart3,
   MoreHorizontal,
   Loader2,
   LogOut,
@@ -398,6 +399,7 @@ export function SidebarAgents() {
         ariaLabel: "Agents section actions",
         actions: [
           { type: "item", label: "Browse agents", icon: Users, href: "/agents/all" },
+          { type: "item", label: "Analytics", icon: BarChart3, href: "/agents/analytics" },
           { type: "separator" },
         ],
         radioLabel: "Agent sort",

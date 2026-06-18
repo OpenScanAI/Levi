@@ -79,3 +79,8 @@ export { pluginDatabaseNamespaces, pluginMigrations } from "./plugin_database.js
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { researchSessions, researchSessionStatusEnum, researchDepthEnum } from "./research_sessions.js";
+export { researchTasks, researchTaskStatusEnum } from "./research_tasks.js";
+export { researchFindings, researchFindingConfidenceEnum } from "./research_findings.js";
+export { researchSources } from "./research_sources.js";
+export { researchMemory } from "./research_memory.js";

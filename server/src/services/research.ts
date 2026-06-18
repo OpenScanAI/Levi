@@ -464,7 +464,7 @@ export function researchService(db: Db, config?: Config) {
         db
           .select({
             total: sql<number>`count(*)`,
-            duplicates: sql<number>`count(*) filter (where ${researchFindings.isDuplicate} = true)`,
+            duplicates: sql<number>`sum(case when ${researchFindings.isDuplicate} = true then 1 else 0 end)`,
             avgReliability: sql<number>`avg(${researchFindings.reliabilityScore})`,
           })
           .from(researchFindings)

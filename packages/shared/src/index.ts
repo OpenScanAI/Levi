@@ -641,6 +641,27 @@ export type {
   PluginWebhookDeliveryRecord,
   QuotaWindow,
   ProviderQuotaResult,
+  ResearchSession,
+  ResearchSessionListItem,
+  ResearchSessionDetail,
+  ResearchTask,
+  ResearchTaskListItem,
+  ResearchFinding,
+  ResearchFindingListItem,
+  ResearchSource,
+  ResearchSourceSnippet,
+  ResearchMemory,
+  ResearchReport,
+  ResearchPlan,
+  ResearchSubtopic,
+  CreateResearchSessionRequest,
+  UpdateResearchSessionRequest,
+  CreateResearchTaskRequest,
+  UpdateResearchTaskRequest,
+  CreateResearchFindingRequest,
+  MarkDuplicateRequest,
+  CreateResearchMemoryRequest,
+  ResearchDashboardSummary,
 } from "./types/index.js";
 export { COMPANY_SEARCH_SCOPES } from "./types/index.js";
 export {
@@ -1076,6 +1097,42 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./validators/index.js";
+
+export {
+  RESEARCH_SESSION_STATUSES,
+  RESEARCH_TASK_STATUSES,
+  RESEARCH_FINDING_CONFIDENCES,
+  RESEARCH_DEPTHS,
+  DEFAULT_RESEARCH_DEPTH,
+  DEFAULT_RESEARCH_MAX_SUBTOPICS,
+  MIN_RESEARCH_MAX_SUBTOPICS,
+  MAX_RESEARCH_MAX_SUBTOPICS,
+  MAX_RESEARCH_QUERY_LENGTH,
+  MAX_RESEARCH_TITLE_LENGTH,
+  type ResearchSessionStatus,
+  type ResearchTaskStatus,
+  type ResearchFindingConfidence,
+  type ResearchDepth,
+} from "./constants.js";
+
+export {
+  createResearchSessionSchema,
+  updateResearchSessionSchema,
+  generateSubtopicsSchema,
+  createResearchTaskSchema,
+  updateResearchTaskSchema,
+  createResearchFindingSchema,
+  markDuplicateSchema,
+  createResearchMemorySchema,
+  type CreateResearchSession,
+  type GenerateSubtopicsRequest,
+  type UpdateResearchSession,
+  type CreateResearchTask,
+  type UpdateResearchTask,
+  type CreateResearchFinding,
+  type MarkDuplicate,
+  type CreateResearchMemory,
+} from "./validators/research.js";
 
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";

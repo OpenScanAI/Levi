@@ -71,3 +71,8 @@ export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { researchService } from "./research.js";
+export { researchEngine } from "./research-engine.js";
+export { createSearchProvider, MockSearchProvider, SerperSearchProvider, SemanticScholarSearchProvider } from "./research-search.js";
+export { generateResearchPlan, extractFindingsFromContent, generateResearchReport } from "./research-llm.js";
+export { researchProgressService } from "./research-progress.js";

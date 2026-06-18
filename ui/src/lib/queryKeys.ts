@@ -150,6 +150,16 @@ export const queryKeys = {
       ["company-search", companyId, q, scope, limit, offset] as const,
   },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
+  research: {
+    sessions: (companyId: string) => ["research", "sessions", companyId] as const,
+    session: (companyId: string, sessionId: string) => ["research", "session", companyId, sessionId] as const,
+    tasks: (companyId: string, sessionId: string) => ["research", "tasks", companyId, sessionId] as const,
+    task: (companyId: string, taskId: string) => ["research", "task", companyId, taskId] as const,
+    findings: (companyId: string, taskId: string) => ["research", "findings", companyId, taskId] as const,
+    sources: (companyId: string, sessionId: string) => ["research", "sources", companyId, sessionId] as const,
+    memory: (companyId: string, key?: string) => ["research", "memory", companyId, key ?? "__all__"] as const,
+    dashboard: (companyId: string) => ["research", "dashboard", companyId] as const,
+  },
   userProfile: (companyId: string, userSlug: string) =>
     ["user-profile", companyId, userSlug] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,

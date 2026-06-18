@@ -209,7 +209,7 @@ export function ResearchSessionDetail() {
                 Cancel
               </Button>
             )}
-            {(session.status === "cancelled" || session.status === "failed") && (
+            {(session.status === "failed") && (
               <Button
                 size="sm"
                 variant="outline"

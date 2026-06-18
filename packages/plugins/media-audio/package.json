@@ -1,0 +1,19 @@
+{
+  "name": "@paperclipai/media-audio",
+  "version": "0.1.0",
+  "description": "Audio/TTS generation plugin for Paperclip — ElevenLabs, Edge TTS",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@paperclipai/plugin-sdk": "workspace:*",
+    "@paperclipai/media-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

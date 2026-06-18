@@ -1,0 +1,19 @@
+{
+  "name": "@paperclipai/media-image",
+  "version": "0.1.0",
+  "description": "Image generation plugin for Paperclip — Stable Diffusion, DALL-E",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@paperclipai/plugin-sdk": "workspace:*",
+    "@paperclipai/media-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@paperclipai/media-dashboard",
+  "version": "0.1.0",
+  "description": "Dashboard UI plugin for Paperclip media gallery and generation status",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@paperclipai/plugin-sdk": "workspace:*",
+    "@paperclipai/media-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0"
+  }
+}

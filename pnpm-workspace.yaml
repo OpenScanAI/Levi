@@ -2,6 +2,12 @@ packages:
   - packages/*
   - packages/adapters/*
   - packages/plugins/*
+  # Media generation plugin suite
+  - packages/plugins/media-core
+  - packages/plugins/media-image
+  - packages/plugins/media-video
+  - packages/plugins/media-audio
+  - packages/plugins/media-dashboard
   # Keep sandbox-provider plugins installable as standalone packages without
   # forcing root pnpm-lock.yaml churn for their third-party deps.
   - "!packages/plugins/sandbox-providers/**"

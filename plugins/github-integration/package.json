@@ -14,7 +14,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@paperclipai/plugin-sdk": "^1.0.0",
+    "@paperclipai/plugin-sdk": "workspace:*",
     "@octokit/rest": "^21.0.0"
   },
   "devDependencies": {

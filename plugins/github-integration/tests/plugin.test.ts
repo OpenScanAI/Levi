@@ -288,8 +288,8 @@ describe("GitHub Integration Plugin", () => {
     });
 
     it("should calculate wait time", () => {
-      const resetAt = "1700000000";
-      const waitMs = parseInt(resetAt) * 1000 - Date.now();
+      const resetAt = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
+      const waitMs = resetAt * 1000 - Date.now();
 
       expect(waitMs).toBeGreaterThan(0);
     });

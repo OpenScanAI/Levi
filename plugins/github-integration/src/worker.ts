@@ -14,6 +14,7 @@ interface GitHubConfig {
   statusMapping?: string;
   enablePrOnDone?: boolean;
   githubTokenSecretRef?: string;
+  githubToken?: string;
   githubWebhookSecretRef?: string;
   defaultCompanyId?: string;
 }
@@ -111,7 +112,12 @@ const plugin = definePlugin({
 
     let token: string;
     const tokenRef = config.githubTokenSecretRef;
-    if (tokenRef && typeof tokenRef === "string" && tokenRef.length > 0) {
+    const plainToken = config.githubToken;
+
+    if (plainToken && typeof plainToken === "string" && plainToken.length > 0) {
+      token = plainToken;
+      ctx.logger.info("Using plain githubToken from config (fallback mode).");
+    } else if (tokenRef && typeof tokenRef === "string" && tokenRef.length > 0) {
       try {
         token = await ctx.secrets.resolve(tokenRef);
       } catch (err: any) {
@@ -120,7 +126,7 @@ const plugin = definePlugin({
         return;
       }
     } else {
-      ctx.logger.warn("githubTokenSecretRef not configured. Plugin running in degraded mode.");
+      ctx.logger.warn("No githubToken or githubTokenSecretRef configured. Plugin running in degraded mode.");
       return;
     }
 

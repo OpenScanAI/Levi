@@ -64,7 +64,13 @@ const manifest: PaperclipPluginManifestV1 = {
         type: "string",
         format: "secret-ref",
         title: "GitHub Token Secret",
-        description: "Secret UUID reference for the GitHub personal access token",
+        description: "Secret UUID reference for the GitHub personal access token (preferred, but requires company-scoped plugin config support)",
+        default: "",
+      },
+      githubToken: {
+        type: "string",
+        title: "GitHub Token (Plain)",
+        description: "GitHub personal access token (fallback when secret resolution is unavailable). Use githubTokenSecretRef in production.",
         default: "",
       },
       githubWebhookSecretRef: {

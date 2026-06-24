@@ -1,5 +1,13 @@
 # @paperclipai/adapter-claude-local
 
+## Unreleased
+
+### Patch Changes
+
+- Added lenient JSON parsing fallback in `parseClaudeStreamJson()` for markdown-wrapped and mixed-text output
+- Added `extractResultFromMixedOutput()` to locate `"type": "result"` JSON objects inside interleaved text
+- Treats exit-code-0 + parse failure as inferred success with `inferredSuccess: true` flag instead of error
+
 ## 0.3.1
 
 ### Patch Changes

@@ -83,3 +83,7 @@ export { pluginDatabaseNamespaces, pluginMigrations } from "./plugin_database.js
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { agentFindings } from "./agent_findings.js";
+export { agentReports } from "./agent_reports.js";
+export { notificationConfigs } from "./notification_configs.js";
+export { agentRunTags } from "./agent_run_tags.js";

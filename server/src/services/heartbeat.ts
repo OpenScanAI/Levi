@@ -87,6 +87,15 @@ import {
   type RunLivenessClassificationInput,
 } from "./run-liveness.js";
 import { logActivity, publishPluginDomainEvent, type LogActivityInput } from "./activity-log.js";
+
+function formatHeartbeatDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 import {
   buildWorkspaceReadyComment,
   cleanupExecutionWorkspaceArtifacts,
@@ -4101,27 +4110,27 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           finishedAt: updated.finishedAt ? new Date(updated.finishedAt).toISOString() : null,
         },
       });
-      publishRunLifecyclePluginEvent(updated);
+      await publishRunLifecyclePluginEvent(updated);
     }
 
     return updated;
   }
 
-  function publishRunLifecyclePluginEvent(run: typeof heartbeatRuns.$inferSelect) {
-    const eventType =
+  async function publishRunLifecyclePluginEvent(run: typeof heartbeatRuns.$inferSelect) {
+    const pluginEventType =
       run.status === "running"
         ? "agent.run.started"
         : run.status === "succeeded"
-          ? "agent.run.finished"
+          ? "agent.run.completed"
           : run.status === "failed" || run.status === "timed_out"
             ? "agent.run.failed"
             : run.status === "cancelled"
               ? "agent.run.cancelled"
               : null;
-    if (!eventType) return;
+    if (!pluginEventType) return;
     publishPluginDomainEvent({
       eventId: randomUUID(),
-      eventType,
+      eventType: pluginEventType as any,
       occurredAt: new Date().toISOString(),
       actorId: run.agentId,
       actorType: "agent",
@@ -4143,6 +4152,58 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
       },
     });
+    // Also publish as live event for dashboard WebSocket feed
+    const liveEventType: import("@paperclipai/shared").LiveEventType | null =
+      run.status === "running"
+        ? "agent.run.started"
+        : run.status === "succeeded"
+          ? "agent.run.completed"
+          : run.status === "failed" || run.status === "timed_out"
+            ? "agent.run.failed"
+            : run.status === "cancelled"
+              ? "agent.run.failed"
+              : null;
+    if (liveEventType) {
+      publishLiveEvent({
+        companyId: run.companyId,
+        type: liveEventType,
+        payload: {
+          runId: run.id,
+          agentId: run.agentId,
+          status: run.status,
+          invocationSource: run.invocationSource,
+          triggerDetail: run.triggerDetail,
+          error: run.error ?? null,
+          errorCode: run.errorCode ?? null,
+          startedAt: run.startedAt ? new Date(run.startedAt).toISOString() : null,
+          finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
+        },
+      });
+    }
+
+    // Dispatch notification webhooks for run lifecycle events
+    if (run.status === "succeeded" || run.status === "failed" || run.status === "timed_out" || run.status === "cancelled") {
+      try {
+        const { notificationsService } = await import("./notifications.js");
+        const svc = notificationsService(db);
+        const eventType = run.status === "succeeded" ? "agent.run.completed" : "agent.run.failed";
+        const agent = await db.select().from(agents).where(eq(agents.id, run.agentId)).then(rows => rows[0] ?? null);
+        const durationMs = run.startedAt && run.finishedAt
+          ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
+          : null;
+        const duration = durationMs !== null ? formatHeartbeatDuration(durationMs) : undefined;
+        await svc.dispatchAgentRunEvent(run.companyId, eventType as any, {
+          agentName: agent?.name ?? "Unknown Agent",
+          runId: run.id,
+          status: run.status,
+          duration,
+          error: run.error ?? undefined,
+          companyName: "", // Will be resolved by the notification service if needed
+        });
+      } catch (err) {
+        logger.error({ msg: "Failed to dispatch run notification", error: String(err), runId: run.id });
+      }
+    }
   }
 
   async function setWakeupStatus(
@@ -6240,7 +6301,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         finishedAt: claimed.finishedAt ? new Date(claimed.finishedAt).toISOString() : null,
       },
     });
-    publishRunLifecyclePluginEvent(claimed);
+    await publishRunLifecyclePluginEvent(claimed);
 
     await setWakeupStatus(claimed.wakeupRequestId, "claimed", { claimedAt });
 

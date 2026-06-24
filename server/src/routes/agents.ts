@@ -3439,5 +3439,57 @@ export function agentRoutes(
     });
   });
 
+  // Bulk import agents from GitHub repos
+  router.post("/companies/:companyId/agents/bulk-import", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const repos = req.body.repos as Array<{ url: string; branch?: string | null }> | undefined;
+    if (!Array.isArray(repos) || repos.length === 0) {
+      res.status(400).json({ error: "repos must be a non-empty array" });
+      return;
+    }
+
+    const actor = getActorInfo(req);
+    const results = await svc.bulkImportFromGitHub(companyId, repos, actor);
+    res.json({ results });
+  });
+
+  // Bulk update agent status (enable/disable/terminate)
+  router.post("/companies/:companyId/agents/bulk", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const agentIds = req.body.agentIds as string[] | undefined;
+    const action = req.body.action as "enable" | "disable" | "terminate" | undefined;
+
+    if (!Array.isArray(agentIds) || agentIds.length === 0) {
+      res.status(400).json({ error: "agentIds must be a non-empty array" });
+      return;
+    }
+    if (!action || !["enable", "disable", "terminate"].includes(action)) {
+      res.status(400).json({ error: "action must be enable, disable, or terminate" });
+      return;
+    }
+
+    const result = await svc.bulkUpdateStatus(companyId, agentIds, action);
+    res.json(result);
+  });
+
+  // Compare agents across repos
+  router.post("/companies/:companyId/agents/compare", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const agentIds = req.body.agentIds as string[] | undefined;
+    if (!Array.isArray(agentIds) || agentIds.length === 0) {
+      res.status(400).json({ error: "agentIds must be a non-empty array" });
+      return;
+    }
+
+    const result = await svc.compareAcrossRepos(companyId, agentIds);
+    res.json(result);
+  });
+
   return router;
 }

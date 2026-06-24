@@ -1,4 +1,4 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { agents, approvals, companies, costEvents, heartbeatRuns, issues } from "@paperclipai/db";
 import { notFound } from "../errors.js";
@@ -157,6 +157,105 @@ export function dashboardService(db: Db) {
         },
         runActivity: Array.from(runActivity.values()),
       };
+    },
+
+    agentTelemetry: async (companyId: string) => {
+      const activeAgents = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          status: agents.status,
+          role: agents.role,
+          adapterType: agents.adapterType,
+        })
+        .from(agents)
+        .where(and(eq(agents.companyId, companyId), eq(agents.status, "running")));
+
+      const recentRuns = await db
+        .select({
+          id: heartbeatRuns.id,
+          agentId: heartbeatRuns.agentId,
+          status: heartbeatRuns.status,
+          startedAt: heartbeatRuns.startedAt,
+          finishedAt: heartbeatRuns.finishedAt,
+          error: heartbeatRuns.error,
+        })
+        .from(heartbeatRuns)
+        .where(
+          and(
+            eq(heartbeatRuns.companyId, companyId),
+            gte(heartbeatRuns.createdAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+          ),
+        )
+        .orderBy(desc(heartbeatRuns.createdAt))
+        .limit(50);
+
+      return {
+        activeAgents,
+        recentRuns,
+      };
+    },
+
+    recentRuns: async (companyId: string, limit = 20) => {
+      return db
+        .select({
+          id: heartbeatRuns.id,
+          agentId: heartbeatRuns.agentId,
+          status: heartbeatRuns.status,
+          invocationSource: heartbeatRuns.invocationSource,
+          triggerDetail: heartbeatRuns.triggerDetail,
+          startedAt: heartbeatRuns.startedAt,
+          finishedAt: heartbeatRuns.finishedAt,
+          error: heartbeatRuns.error,
+          createdAt: heartbeatRuns.createdAt,
+        })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.companyId, companyId))
+        .orderBy(desc(heartbeatRuns.createdAt))
+        .limit(limit);
+    },
+
+    findingsSummary: async (companyId: string) => {
+      const { agentFindings } = await import("@paperclipai/db");
+      const rows = await db
+        .select({
+          severity: agentFindings.severity,
+          count: sql<number>`count(*)::double precision`,
+        })
+        .from(agentFindings)
+        .where(eq(agentFindings.companyId, companyId))
+        .groupBy(agentFindings.severity);
+
+      return rows.map((row) => ({
+        severity: row.severity,
+        count: Number(row.count),
+      }));
+    },
+
+    stuckAgents: async (companyId: string) => {
+      const stuckThreshold = new Date(Date.now() - 30 * 60 * 1000); // 30 minutes
+      return db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          status: agents.status,
+          lastRunAt: heartbeatRuns.startedAt,
+        })
+        .from(agents)
+        .leftJoin(heartbeatRuns, eq(agents.id, heartbeatRuns.agentId))
+        .where(
+          and(
+            eq(agents.companyId, companyId),
+            or(
+              eq(agents.status, "error"),
+              and(
+                eq(agents.status, "running"),
+                gte(heartbeatRuns.startedAt, stuckThreshold),
+              ),
+            ),
+          ),
+        )
+        .orderBy(desc(heartbeatRuns.startedAt));
     },
   };
 }

@@ -958,6 +958,28 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
     }
 
+    // Connection refused or other transient upstream errors: rotate session and retry
+    if (
+      sessionId &&
+      !initial.proc.timedOut &&
+      (initial.proc.exitCode ?? 0) !== 0 &&
+      isClaudeTransientUpstreamError({
+        parsed: initial.parsed,
+        stdout: initial.proc.stdout,
+        stderr: initial.proc.stderr,
+        errorMessage: initial.parsed
+          ? describeClaudeFailure(initial.parsed) ?? `Claude exited with code ${initial.proc.exitCode ?? -1}`
+          : parseFallbackErrorMessage(initial.proc),
+      })
+    ) {
+      await onLog(
+        "stdout",
+        `[paperclip] Claude connection failed with transient error; rotating session and retrying.\n`,
+      );
+      const retry = await runAttempt(null);
+      return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
+    }
+
     return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
   } finally {
     if (paperclipBridge) {

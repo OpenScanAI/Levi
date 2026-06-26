@@ -87,6 +87,24 @@ describe("isClaudeTransientUpstreamError", () => {
     ).toBe(false);
   });
 
+  it("classifies connection refused / ECONNREFUSED as transient", () => {
+    expect(
+      isClaudeTransientUpstreamError({
+        stderr: "Error: connect ECONNREFUSED 127.0.0.1:3456",
+      }),
+    ).toBe(true);
+    expect(
+      isClaudeTransientUpstreamError({
+        stderr: "Connection refused while trying to reach Claude Code server",
+      }),
+    ).toBe(true);
+    expect(
+      isClaudeTransientUpstreamError({
+        errorMessage: "Claude Code CLI connection refused",
+      }),
+    ).toBe(true);
+  });
+
   it("does not classify deterministic validation errors as transient", () => {
     expect(
       isClaudeTransientUpstreamError({

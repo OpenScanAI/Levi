@@ -5,6 +5,7 @@ import {
   agents,
   agentConfigRevisions,
   agentApiKeys,
+  agentFindings,
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
@@ -20,6 +21,7 @@ import { AGENT_DEFAULT_MAX_CONCURRENT_RUNS, isUuidLike, normalizeAgentUrlKey } f
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";
+import { ghFetch, resolveRawGitHubUrl } from "./github-fetch.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -745,6 +747,206 @@ export function agentService(db: Db) {
         return { agent: null, ambiguous: true } as const;
       }
       return { agent: null, ambiguous: false } as const;
+    },
+
+    bulkImportFromGitHub: async (
+      companyId: string,
+      repos: Array<{ url: string; branch?: string | null }>,
+      actor: { agentId?: string | null; userId?: string | null },
+    ) => {
+      const results: Array<{
+        url: string;
+        success: boolean;
+        agentId?: string;
+        agentName?: string;
+        error?: string;
+      }> = [];
+
+      for (const repo of repos) {
+        try {
+          const url = new URL(repo.url);
+          const parts = url.pathname.replace(/^\/+/, "").split("/").filter(Boolean);
+          if (parts.length < 2) {
+            results.push({ url: repo.url, success: false, error: "Invalid GitHub URL format" });
+            continue;
+          }
+          const [owner, repoName] = parts;
+          const branch = repo.branch ?? "main";
+
+          // Fetch agent.json from repo
+          const rawUrl = resolveRawGitHubUrl(url.hostname, owner, repoName, branch, "agent.json");
+          const response = await ghFetch(rawUrl, { headers: { Accept: "application/json" } });
+          if (!response.ok) {
+            results.push({
+              url: repo.url,
+              success: false,
+              error: `Could not fetch agent.json: ${response.status} ${response.statusText}`,
+            });
+            continue;
+          }
+
+          const agentJson = await response.json();
+          if (!agentJson || typeof agentJson !== "object") {
+            results.push({ url: repo.url, success: false, error: "Invalid agent.json format" });
+            continue;
+          }
+
+          const name = String(agentJson.name ?? repoName).trim();
+          const role = String(agentJson.role ?? "general").trim();
+          const title = agentJson.title ? String(agentJson.title).trim() : null;
+          const capabilities = Array.isArray(agentJson.capabilities) ? agentJson.capabilities : [];
+          const adapterType = String(agentJson.adapterType ?? "openai").trim();
+          const adapterConfig = isPlainRecord(agentJson.adapterConfig) ? agentJson.adapterConfig : {};
+          const runtimeConfig = isPlainRecord(agentJson.runtimeConfig) ? agentJson.runtimeConfig : {};
+          const metadata = isPlainRecord(agentJson.metadata) ? agentJson.metadata : {};
+
+          const created = await db
+            .insert(agents)
+            .values({
+              companyId,
+              name,
+              role,
+              title,
+              capabilities,
+              adapterType,
+              adapterConfig,
+              runtimeConfig,
+              metadata: { ...metadata, sourceRepo: repo.url, sourceBranch: branch },
+              permissions: normalizeAgentPermissions({}, role),
+              status: "idle",
+            })
+            .returning()
+            .then((rows) => rows[0]);
+
+          // Record config revision
+          await db.insert(agentConfigRevisions).values({
+            agentId: created.id,
+            companyId,
+            beforeConfig: {},
+            afterConfig: buildConfigSnapshot(created),
+            createdByAgentId: actor.agentId ?? null,
+            createdByUserId: actor.userId ?? null,
+            source: "bulk_import",
+          });
+
+          results.push({
+            url: repo.url,
+            success: true,
+            agentId: created.id,
+            agentName: name,
+          });
+        } catch (err) {
+          results.push({ url: repo.url, success: false, error: String(err) });
+        }
+      }
+
+      return results;
+    },
+
+    bulkUpdateStatus: async (
+      companyId: string,
+      agentIds: string[],
+      action: "enable" | "disable" | "terminate",
+    ) => {
+      if (agentIds.length === 0) return { updated: 0, agents: [] };
+
+      const existing = await db
+        .select()
+        .from(agents)
+        .where(and(eq(agents.companyId, companyId), inArray(agents.id, agentIds)));
+
+      const updated: typeof agents.$inferSelect[] = [];
+
+      for (const agent of existing) {
+        if (action === "terminate") {
+          if (agent.status === "terminated") continue;
+          await db
+            .update(agents)
+            .set({ status: "terminated", pauseReason: null, pausedAt: null, updatedAt: new Date() })
+            .where(eq(agents.id, agent.id));
+          await db
+            .update(agentApiKeys)
+            .set({ revokedAt: new Date() })
+            .where(eq(agentApiKeys.agentId, agent.id));
+          updated.push({ ...agent, status: "terminated" });
+        } else if (action === "disable") {
+          if (agent.status === "terminated" || agent.status === "paused") continue;
+          await db
+            .update(agents)
+            .set({ status: "paused", pauseReason: "manual", pausedAt: new Date(), updatedAt: new Date() })
+            .where(eq(agents.id, agent.id));
+          updated.push({ ...agent, status: "paused" });
+        } else if (action === "enable") {
+          if (agent.status !== "paused") continue;
+          await db
+            .update(agents)
+            .set({ status: "idle", pauseReason: null, pausedAt: null, updatedAt: new Date() })
+            .where(eq(agents.id, agent.id));
+          updated.push({ ...agent, status: "idle" });
+        }
+      }
+
+      return { updated: updated.length, agents: updated.map(normalizeAgentRow) };
+    },
+
+    compareAcrossRepos: async (companyId: string, agentIds: string[]) => {
+      if (agentIds.length === 0) return [];
+
+      const rows = await db
+        .select()
+        .from(agents)
+        .where(and(eq(agents.companyId, companyId), inArray(agents.id, agentIds)));
+
+      const hydrated = await hydrateAgentSpend(rows);
+      const normalized = hydrated.map(normalizeAgentRow);
+
+      // Get run stats for each agent
+      const runStats = await db
+        .select({
+          agentId: heartbeatRuns.agentId,
+          status: heartbeatRuns.status,
+          count: sql<number>`count(*)`,
+        })
+        .from(heartbeatRuns)
+        .where(inArray(heartbeatRuns.agentId, agentIds))
+        .groupBy(heartbeatRuns.agentId, heartbeatRuns.status);
+
+      const statsByAgent = new Map<string, Map<string, number>>();
+      for (const row of runStats) {
+        const map = statsByAgent.get(row.agentId) ?? new Map();
+        map.set(row.status, Number(row.count));
+        statsByAgent.set(row.agentId, map);
+      }
+
+      // Get findings count for each agent
+      const findingsResult = await db
+        .select({
+          agentId: agentFindings.agentId,
+          count: sql<number>`count(*)`,
+        })
+        .from(agentFindings)
+        .where(and(eq(agentFindings.companyId, companyId), inArray(agentFindings.agentId, agentIds)))
+        .groupBy(agentFindings.agentId);
+
+      const findingsByAgent = new Map(findingsResult.map((r) => [r.agentId, Number(r.count)]));
+
+      return normalized.map((agent) => {
+        const stats = statsByAgent.get(agent.id) ?? new Map();
+        const totalRuns = [...stats.values()].reduce((a, b) => a + b, 0);
+        const succeeded = stats.get("succeeded") ?? 0;
+        const failed = (stats.get("failed") ?? 0) + (stats.get("timed_out") ?? 0);
+        const successRate = totalRuns > 0 ? Math.round((succeeded / totalRuns) * 100) : 0;
+
+        return {
+          ...agent,
+          totalRuns,
+          succeededRuns: succeeded,
+          failedRuns: failed,
+          successRate,
+          findingsCount: findingsByAgent.get(agent.id) ?? 0,
+          sourceRepo: (agent.metadata as Record<string, unknown> | null)?.sourceRepo as string | undefined,
+        };
+      });
     },
   };
 }

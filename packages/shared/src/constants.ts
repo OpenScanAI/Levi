@@ -621,8 +621,33 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  "agent.run.started",
+  "agent.run.completed",
+  "agent.run.failed",
+  "agent.run.stuck",
+  "agent.finding.created",
+  "agent.report.generated",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
+
+export const FINDING_SEVERITIES = ["critical", "high", "medium", "low", "info"] as const;
+export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
+
+export const REPORT_TYPES = ["eod", "import", "summary", "custom"] as const;
+export type ReportType = (typeof REPORT_TYPES)[number];
+
+export const NOTIFICATION_TYPES = ["discord", "telegram", "webhook"] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const NOTIFICATION_EVENT_TYPES = [
+  "agent.run.completed",
+  "agent.run.failed",
+  "agent.run.stuck",
+  "agent.finding.created",
+  "agent.report.generated",
+  "daily.digest",
+] as const;
+export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 
 export const PRINCIPAL_TYPES = ["user", "agent"] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];

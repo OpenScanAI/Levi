@@ -204,6 +204,15 @@ export const queryKeys = {
     dashboard: (pluginId: string) => ["plugins", pluginId, "dashboard"] as const,
     logs: (pluginId: string) => ["plugins", pluginId, "logs"] as const,
   },
+  findings: (companyId: string) => ["findings", companyId] as const,
+  reports: (companyId: string) => ["reports", companyId] as const,
+  notifications: (companyId: string) => ["notifications", companyId] as const,
+  agentRuns: (companyId: string) => ["agent-runs", companyId] as const,
+  bulkOperations: {
+    all: ["bulkOperations"] as const,
+    import: (companyId: string) => ["bulkOperations", "import", companyId] as const,
+    comparison: (companyId: string) => ["bulkOperations", "comparison", companyId] as const,
+  },
   adapters: {
     all: ["adapters"] as const,
   },

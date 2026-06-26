@@ -34,7 +34,7 @@ export const reportsApi = {
     contentJson?: Record<string, unknown>;
     logoAssetId?: string | null;
     generatedBy?: string | null;
-  }) => api.post<Report>(`/companies/${companyId}/reports`, body),
+  } & Record<string, unknown>) => api.post<Report>(`/companies/${companyId}/reports`, body),
   delete: (companyId: string, id: string) =>
     api.delete<{ deleted: true }>(`/companies/${companyId}/reports/${id}`),
 };

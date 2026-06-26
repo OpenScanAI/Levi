@@ -82,11 +82,13 @@ export function ReportsPanel({ reports }: ReportsPanelProps) {
       return;
     }
     const reportType = newReport.type as "summary" | "import" | "custom" | "eod";
-    createMutation.mutate({
+    const createBody: Parameters<typeof reportsApi.create>[1] = {
       type: reportType,
       title: newReport.title,
       contentJson: newReport.content ? { content: newReport.content } : undefined,
-    });
+      generatedBy: null,
+    };
+    createMutation.mutate(createBody);
   };
 
   return (

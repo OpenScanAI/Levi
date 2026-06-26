@@ -6,8 +6,13 @@ import { reportsApi } from "../api/reports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Trash2 } from "lucide-react";
+import { FileText, Trash2, Plus } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/context/ToastContext";
 
 const typeLabels: Record<string, string> = {
   custom: "Custom",
@@ -30,7 +35,14 @@ interface ReportsPanelProps {
 export function ReportsPanel({ reports }: ReportsPanelProps) {
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const [offset, setOffset] = useState(0);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newReport, setNewReport] = useState({
+    title: "",
+    type: "custom" as string,
+    content: "",
+  });
   const limit = 20;
 
   const { data, isLoading } = useQuery({
@@ -40,21 +52,52 @@ export function ReportsPanel({ reports }: ReportsPanelProps) {
     enabled: !!selectedCompanyId,
   });
 
+  const createMutation = useMutation({
+    mutationFn: (body: { type: "summary" | "import" | "custom" | "eod"; title: string; contentJson?: Record<string, unknown> }) =>
+      reportsApi.create(selectedCompanyId!, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.reports(selectedCompanyId!) });
+      setShowCreateDialog(false);
+      setNewReport({ title: "", type: "custom", content: "" });
+      pushToast({ title: "Report created successfully" });
+    },
+    onError: (error) => {
+      pushToast({ title: `Failed to create report: ${error.message}` });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => reportsApi.delete(selectedCompanyId!, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.reports(selectedCompanyId!) });
+      pushToast({ title: "Report deleted" });
     },
   });
 
   const displayReports = data?.reports ?? reports;
+
+  const handleCreate = () => {
+    if (!newReport.title.trim()) {
+      pushToast({ title: "Title is required" });
+      return;
+    }
+    const reportType = newReport.type as "summary" | "import" | "custom" | "eod";
+    createMutation.mutate({
+      type: reportType,
+      title: newReport.title,
+      contentJson: newReport.content ? { content: newReport.content } : undefined,
+    });
+  };
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-medium">Reports</CardTitle>
-          <Button size="sm">Generate Report</Button>
+          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Generate Report
+          </Button>
         </div>
       </CardHeader>
       <CardContent>
@@ -130,6 +173,60 @@ export function ReportsPanel({ reports }: ReportsPanelProps) {
           </div>
         )}
       </CardContent>
+
+      {/* Create Report Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                placeholder="Enter report title"
+                value={newReport.title}
+                onChange={(e) => setNewReport({ ...newReport, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="type">Type</Label>
+              <Select
+                value={newReport.type}
+                onValueChange={(value) => setNewReport({ ...newReport, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select report type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="eod">End of Day</SelectItem>
+                  <SelectItem value="import">Import Summary</SelectItem>
+                  <SelectItem value="summary">Summary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="content">Content (optional)</Label>
+              <Input
+                id="content"
+                placeholder="Enter report content"
+                value={newReport.content}
+                onChange={(e) => setNewReport({ ...newReport, content: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreate} disabled={createMutation.isPending}>
+              {createMutation.isPending ? "Creating..." : "Create Report"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

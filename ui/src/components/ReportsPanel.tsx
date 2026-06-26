@@ -26,7 +26,7 @@ interface ReportsPanelProps {
     id: string;
     type: string;
     title: string;
-    generatedBy: string;
+    generatedBy: string | null;
     generatedAt: Date | null;
     createdAt: Date;
   }>;

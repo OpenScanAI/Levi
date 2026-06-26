@@ -60,15 +60,19 @@ export function reportsService(db: Db, storageService: StorageService) {
         })
         .returning();
 
-      await logActivity(db, {
-        companyId: input.companyId,
-        actorType: "system",
-        actorId: input.actorId ?? "system",
-        action: "report_generated",
-        entityType: "report",
-        entityId: report.id,
-        details: { type: input.type, title: input.title },
-      });
+      try {
+        await logActivity(db, {
+          companyId: input.companyId,
+          actorType: "system",
+          actorId: input.actorId ?? "system",
+          action: "report_generated",
+          entityType: "report",
+          entityId: report.id,
+          details: { type: input.type, title: input.title },
+        });
+      } catch (err) {
+        logger.warn({ msg: "Failed to log report activity", error: String(err) });
+      }
 
       return report;
     },

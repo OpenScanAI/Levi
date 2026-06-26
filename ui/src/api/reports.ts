@@ -9,7 +9,7 @@ export interface Report {
   contentJson: Record<string, unknown>;
   pdfUrl: string | null;
   logoAssetId: string | null;
-  generatedBy: string;
+  generatedBy: string | null;
   generatedAt: Date | null;
   createdAt: Date;
 }
@@ -33,7 +33,7 @@ export const reportsApi = {
     title: string;
     contentJson?: Record<string, unknown>;
     logoAssetId?: string | null;
-    generatedBy?: string;
+    generatedBy?: string | null;
   }) => api.post<Report>(`/companies/${companyId}/reports`, body),
   delete: (companyId: string, id: string) =>
     api.delete<{ deleted: true }>(`/companies/${companyId}/reports/${id}`),

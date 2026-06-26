@@ -126,7 +126,7 @@ export function agentRunsService(db: Db) {
       const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-      const [totalRuns, runsLast24h, runsLast7d, succeededRuns, failedRuns] = await Promise.all([
+      const [total, running, succeeded, failed, stuck, runsLast24h, runsLast7d] = await Promise.all([
         db
           .select({ count: sql<number>`count(*)` })
           .from(heartbeatRuns)
@@ -135,12 +135,7 @@ export function agentRunsService(db: Db) {
         db
           .select({ count: sql<number>`count(*)` })
           .from(heartbeatRuns)
-          .where(and(eq(heartbeatRuns.companyId, companyId), gte(heartbeatRuns.createdAt, dayAgo)))
-          .then((rows) => Number(rows[0]?.count ?? 0)),
-        db
-          .select({ count: sql<number>`count(*)` })
-          .from(heartbeatRuns)
-          .where(and(eq(heartbeatRuns.companyId, companyId), gte(heartbeatRuns.createdAt, weekAgo)))
+          .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.status, "running")))
           .then((rows) => Number(rows[0]?.count ?? 0)),
         db
           .select({ count: sql<number>`count(*)` })
@@ -152,15 +147,37 @@ export function agentRunsService(db: Db) {
           .from(heartbeatRuns)
           .where(and(eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.status, "failed")))
           .then((rows) => Number(rows[0]?.count ?? 0)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(heartbeatRuns)
+          .where(
+            and(
+              eq(heartbeatRuns.companyId, companyId),
+              eq(heartbeatRuns.status, "timed_out"),
+            ),
+          )
+          .then((rows) => Number(rows[0]?.count ?? 0)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(heartbeatRuns)
+          .where(and(eq(heartbeatRuns.companyId, companyId), gte(heartbeatRuns.createdAt, dayAgo)))
+          .then((rows) => Number(rows[0]?.count ?? 0)),
+        db
+          .select({ count: sql<number>`count(*)` })
+          .from(heartbeatRuns)
+          .where(and(eq(heartbeatRuns.companyId, companyId), gte(heartbeatRuns.createdAt, weekAgo)))
+          .then((rows) => Number(rows[0]?.count ?? 0)),
       ]);
 
       return {
-        totalRuns,
+        total,
+        running,
+        succeeded,
+        failed,
+        stuck,
         runsLast24h,
         runsLast7d,
-        succeededRuns,
-        failedRuns,
-        successRate: totalRuns > 0 ? Number(((succeededRuns / totalRuns) * 100).toFixed(2)) : 0,
+        successRate: total > 0 ? Number(((succeeded / total) * 100).toFixed(2)) : 0,
       };
     },
   };

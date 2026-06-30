@@ -527,12 +527,14 @@ describe("parseSessionCompactionPolicy", () => {
       maxSessionRuns: 0,
       maxRawInputTokens: 0,
       maxSessionAgeHours: 0,
+      maxConsecutiveAdapterFailed: 0,
     });
     expect(parseSessionCompactionPolicy(buildAgent("claude_local"))).toEqual({
       enabled: true,
       maxSessionRuns: 0,
       maxRawInputTokens: 0,
       maxSessionAgeHours: 0,
+      maxConsecutiveAdapterFailed: 2,
     });
   });
 
@@ -542,12 +544,14 @@ describe("parseSessionCompactionPolicy", () => {
       maxSessionRuns: 200,
       maxRawInputTokens: 2_000_000,
       maxSessionAgeHours: 72,
+      maxConsecutiveAdapterFailed: 0,
     });
     expect(parseSessionCompactionPolicy(buildAgent("opencode_local"))).toEqual({
       enabled: true,
       maxSessionRuns: 200,
       maxRawInputTokens: 2_000_000,
       maxSessionAgeHours: 72,
+      maxConsecutiveAdapterFailed: 0,
     });
   });
 
@@ -559,6 +563,7 @@ describe("parseSessionCompactionPolicy", () => {
             sessionCompaction: {
               maxSessionRuns: 25,
               maxRawInputTokens: 500_000,
+              maxConsecutiveAdapterFailed: 3,
             },
           },
         }),
@@ -568,6 +573,7 @@ describe("parseSessionCompactionPolicy", () => {
       maxSessionRuns: 25,
       maxRawInputTokens: 500_000,
       maxSessionAgeHours: 0,
+      maxConsecutiveAdapterFailed: 3,
     });
   });
 });

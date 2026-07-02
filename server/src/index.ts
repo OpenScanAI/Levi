@@ -7,6 +7,7 @@ import { stdin, stdout } from "node:process";
 import { pathToFileURL } from "node:url";
 import type { Request as ExpressRequest, RequestHandler } from "express";
 import { and, eq } from "drizzle-orm";
+import type { Db } from "@paperclipai/db";
 import {
   createDb,
   ensurePostgresDatabase,
@@ -36,6 +37,7 @@ import {
   routineService,
 } from "./services/index.js";
 import { createFeedbackTraceShareClientFromConfig } from "./services/feedback-share-client.js";
+import { drainStaleHeartbeatRunsOnShutdown } from "./services/heartbeat-shutdown-drain.js";
 import { buildRuntimeApiCandidateUrls, choosePrimaryRuntimeApiUrl } from "./runtime-api.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
@@ -260,7 +262,7 @@ export async function startServer(): Promise<StartedServer> {
     }
   }
   
-  let db;
+  let db: ReturnType<typeof createDb>;
   let pluginMigrationDb;
   let embeddedPostgres: EmbeddedPostgresInstance | null = null;
   let embeddedPostgresStartedByThisProcess = false;
@@ -876,6 +878,21 @@ export async function startServer(): Promise<StartedServer> {
       if (telemetryClient) {
         telemetryClient.stop();
         await telemetryClient.flush();
+      }
+
+      // Mark every still-live heartbeat run as cancelled and clear the
+      // `executionRunId` / `checkoutRunId` locks they hold on issues. Without
+      // this, a clean shutdown leaves the run row in "running" status and the
+      // next checkout from the same agent hits a 409 because the prior lock
+      // is still considered live. Bounded to 5s so a DB hang cannot wedge
+      // process exit; best-effort logging only.
+      try {
+        await Promise.race([
+          drainStaleHeartbeatRunsOnShutdown(db),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        ]);
+      } catch (err) {
+        logger.warn({ err, signal }, "stale heartbeat-run drain on shutdown threw");
       }
 
       if (embeddedPostgres && embeddedPostgresStartedByThisProcess) {

@@ -6,6 +6,7 @@ import {
   activityLog,
   agents,
   agentRuntimeState,
+  agentTaskSessions,
   agentWakeupRequests,
   budgetPolicies,
   companySkills,
@@ -321,6 +322,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     await db.delete(agentRuntimeState);
     await db.delete(companySkills);
     await db.delete(costEvents);
+    await db.delete(agentTaskSessions);
     await db.delete(environmentLeases);
     await db.delete(environments);
     await db.delete(issueWorkProducts);
@@ -3020,6 +3022,140 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
           }),
       5_000,
     );
+
     expect(agent?.status).toBe("idle");
+  });
+
+  it("rotates to a fresh session and avoids a second wasted compaction after autocompact thrash", async () => {
+    const sessionId = "session-thrash-" + randomUUID();
+    const { companyId, agentId, runId, issueId } = await seedQueuedIssueRunFixture();
+
+    // Pre-seed the agent task session so the first run resumes from a known session.
+    await db.insert(agentTaskSessions).values({
+      companyId,
+      agentId,
+      adapterType: "codex_local",
+      taskKey: issueId,
+      sessionDisplayId: sessionId,
+      sessionParamsJson: { sessionId },
+      lastError: null,
+    });
+
+    // Remove the issue_assigned wakeReason so the seeded task session is not reset on wake.
+    await db
+      .update(heartbeatRuns)
+      .set({
+        contextSnapshot: {
+          issueId,
+          taskId: issueId,
+        },
+      })
+      .where(eq(heartbeatRuns.id, runId));
+
+    // First adapter invocation: simulate an autocompact-thrash failure with a cost event.
+    mockAdapterExecute.mockResolvedValueOnce({
+      exitCode: 1,
+      signal: null,
+      timedOut: false,
+      errorCode: "adapter_failed",
+      errorMessage: "Autocompact is thrashing after 3 attempts",
+      provider: "test",
+      model: "test-model",
+      usage: { inputTokens: 100_000, outputTokens: 10_000, cachedInputTokens: 0 },
+      costUsd: 0.5,
+    });
+
+    // Second adapter invocation (the recovery run) should succeed with a fresh session.
+    mockAdapterExecute.mockResolvedValueOnce({
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      errorMessage: null,
+      summary: "Recovered after session rotation.",
+      provider: "test",
+      model: "test-model",
+      usage: { inputTokens: 1_000, outputTokens: 500, cachedInputTokens: 0 },
+      costUsd: 0.01,
+    });
+
+    const heartbeat = heartbeatService(db);
+    await heartbeat.resumeQueuedRuns();
+    await waitForRunToSettle(heartbeat, runId, 5_000);
+    await waitForHeartbeatIdle(db, 5_000);
+
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, agentId))
+      .orderBy(heartbeatRuns.createdAt);
+    expect(runs.length).toBeGreaterThanOrEqual(2);
+
+    const thrashedRun = runs.find((r) => r.id === runId);
+    const recoveryRun = runs.find((r) => r.retryOfRunId === runId);
+    if (!thrashedRun) throw new Error("Expected original thrashed run to exist");
+    if (!recoveryRun) throw new Error("Expected recovery run to exist");
+
+    expect(thrashedRun.status).toBe("failed");
+    expect(thrashedRun.errorCode).toBe("adapter_failed");
+    expect((thrashedRun.resultJson as Record<string, unknown> | null)?.stopReason).toBe("autocompact_thrash");
+    expect(thrashedRun.sessionIdAfter).toBe(sessionId);
+
+    // Locate the adapter calls that correspond to the thrashed and recovery runs.
+    // The exact number of calls can include an optional successful-run handoff; what matters
+    // is that the thrashed run used the poisoned session and the recovery run used a fresh one.
+    const adapterCalls = mockAdapterExecute.mock.calls;
+    const thrashedCallIndex = adapterCalls.findIndex(
+      (c) =>
+        ((c[0] as { runtime?: { sessionId?: string | null } } | undefined)?.runtime?.sessionId ?? null) ===
+        sessionId,
+    );
+    const recoveryCallIndex = adapterCalls.findIndex(
+      (c, idx) =>
+        idx > thrashedCallIndex &&
+        ((c[0] as { runtime?: { sessionId?: string | null } } | undefined)?.runtime?.sessionId ?? null) === null,
+    );
+    const thrashedCall =
+      thrashedCallIndex >= 0
+        ? (adapterCalls[thrashedCallIndex][0] as { runtime?: { sessionId: string | null } } | undefined)
+        : undefined;
+    const recoveryCall =
+      recoveryCallIndex >= 0
+        ? (adapterCalls[recoveryCallIndex][0] as { runtime?: { sessionId: string | null } } | undefined)
+        : undefined;
+
+    expect(thrashedCall?.runtime?.sessionId).toBe(sessionId);
+    expect(recoveryCall?.runtime?.sessionId).toBeNull();
+
+    // The recovery run must resume with a fresh session ID, not the poisoned thrashed session.
+    expect(recoveryRun.sessionIdBefore).not.toBe(sessionId);
+
+    // No second wasted compaction attempt should be recorded: only one run failed with the
+    // autocompact_thrash stop reason, and the recovery run succeeds without another
+    // adapter_failed / autocompact_thrash outcome.
+    const autocompactThrashRuns = runs.filter(
+      (r) =>
+        (r.resultJson as Record<string, unknown> | null)?.stopReason === "autocompact_thrash" ||
+        r.errorCode === "adapter_failed" ||
+        String(r.error ?? "").toLowerCase().includes("autocompact"),
+    );
+    expect(autocompactThrashRuns).toHaveLength(1);
+
+    const costEventRows = await db
+      .select()
+      .from(costEvents)
+      .where(eq(costEvents.agentId, agentId))
+      .orderBy(costEvents.occurredAt);
+
+    const thrashCostEvent = costEventRows.find((e) => e.heartbeatRunId === thrashedRun.id);
+    expect(thrashCostEvent).toBeTruthy();
+
+    // No duplicate cost event should be associated with the thrashed run.
+    expect(costEventRows.filter((e) => e.heartbeatRunId === thrashedRun.id)).toHaveLength(1);
+
+    // The recovery run's context snapshot must carry the rotation signal and reason.
+    const recoveryContext = recoveryRun.contextSnapshot as Record<string, unknown> | null;
+    expect(recoveryContext?.paperclipSessionRotationReason).toContain("autocompact");
+    expect(recoveryContext?.paperclipPreviousSessionId).toBe(sessionId);
+    expect(recoveryRun.status).toBe("succeeded");
   });
 });

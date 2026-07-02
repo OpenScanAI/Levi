@@ -1034,7 +1034,7 @@ type UsageTotals = {
   outputTokens: number;
 };
 
-type SessionCompactionDecision = {
+export type SessionCompactionDecision = {
   rotate: boolean;
   reason: string | null;
   handoffMarkdown: string | null;
@@ -1500,6 +1500,117 @@ function formatCount(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) return "0";
   return value.toLocaleString("en-US");
 }
+
+export function evaluateSessionCompactionFromRuns(input: {
+  agent: typeof agents.$inferSelect;
+  sessionId: string;
+  issueId: string | null;
+  policy: SessionCompactionPolicy;
+  runs: Array<{
+    id: string;
+    createdAt: Date;
+    usageJson: Record<string, unknown> | null;
+    error: string | null;
+    errorCode?: string | null;
+    resultJson?: Record<string, unknown> | null;
+    resultSummary?: string | null;
+    resultResult?: string | null;
+    resultMessage?: string | null;
+    resultError?: string | null;
+    resultTotalCostUsd?: string | null;
+    resultCostUsd?: string | null;
+    resultCostUsdCamel?: string | null;
+  }>;
+  oldestRun: {
+    id: string;
+    createdAt: Date;
+    usageJson: Record<string, unknown> | null;
+    error: string | null;
+  } | null;
+  continuationSummaryBody?: string | null;
+}): SessionCompactionDecision {
+  const { agent, sessionId, issueId, policy, runs, oldestRun } = input;
+  const latestRun = runs[0] ?? null;
+  if (!latestRun) {
+    return {
+      rotate: false,
+      reason: null,
+      handoffMarkdown: null,
+      previousRunId: null,
+    };
+  }
+
+  const latestRawUsage = readRawUsageTotals(latestRun?.usageJson);
+  const sessionAgeHours =
+    latestRun && oldestRun
+      ? Math.max(
+          0,
+          (new Date(latestRun.createdAt).getTime() - new Date(oldestRun.createdAt).getTime()) / (1000 * 60 * 60),
+        )
+      : 0;
+
+  let reason: string | null = null;
+  if (policy.maxSessionRuns > 0 && runs.length > policy.maxSessionRuns) {
+    reason = `session exceeded ${policy.maxSessionRuns} runs`;
+  } else if (
+    policy.maxRawInputTokens > 0 &&
+    latestRawUsage &&
+    latestRawUsage.inputTokens >= policy.maxRawInputTokens
+  ) {
+    reason =
+      `session raw input reached ${formatCount(latestRawUsage.inputTokens)} tokens ` +
+      `(threshold ${formatCount(policy.maxRawInputTokens)})`;
+  } else if (policy.maxSessionAgeHours > 0 && sessionAgeHours >= policy.maxSessionAgeHours) {
+    reason = `session age reached ${Math.floor(sessionAgeHours)} hours`;
+  }
+
+  if (!reason) {
+    return {
+      rotate: false,
+      reason: null,
+      handoffMarkdown: null,
+      previousRunId: latestRun.id,
+    };
+  }
+
+  const latestSummary = summarizeHeartbeatRunListResultJson({
+    summary: latestRun?.resultSummary,
+    result: latestRun?.resultResult,
+    message: latestRun?.resultMessage,
+    error: latestRun?.resultError,
+    totalCostUsd: latestRun?.resultTotalCostUsd,
+    costUsd: latestRun?.resultCostUsd,
+    costUsdCamel: latestRun?.resultCostUsdCamel,
+  });
+  const latestTextSummary =
+    readNonEmptyString(latestSummary?.summary) ??
+    readNonEmptyString(latestSummary?.result) ??
+    readNonEmptyString(latestSummary?.message) ??
+    readNonEmptyString(latestRun.error);
+
+  const handoffMarkdown = [
+    "Paperclip session handoff:",
+    `- Previous session: ${sessionId}`,
+    issueId ? `- Issue: ${issueId}` : "",
+    `- Rotation reason: ${reason}`,
+    latestTextSummary ? `- Last run summary: ${latestTextSummary}` : "",
+    input.continuationSummaryBody
+      ? `- Issue continuation summary: ${input.continuationSummaryBody.slice(0, 1_500)}`
+      : "",
+    "Continue from the current task state. Rebuild only the minimum context you need.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    rotate: true,
+    reason,
+    handoffMarkdown,
+    previousRunId: latestRun.id,
+  };
+}
+
+
 
 export function parseSessionCompactionPolicy(agent: typeof agents.$inferSelect): SessionCompactionPolicy {
   return resolveSessionCompactionPolicy(agent.adapterType, agent.runtimeConfig).policy;
@@ -3294,6 +3405,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .select({
         id: heartbeatRuns.id,
         createdAt: heartbeatRuns.createdAt,
+        usageJson: heartbeatRuns.usageJson,
+        error: heartbeatRuns.error,
       })
       .from(heartbeatRuns)
       .where(and(eq(heartbeatRuns.agentId, agentId), eq(heartbeatRuns.sessionIdAfter, sessionId)))
@@ -3355,6 +3468,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         usageJson: heartbeatRuns.usageJson,
         error: heartbeatRuns.error,
         resultStopReason: sql<string | null>`${heartbeatRuns.resultJson} ->> 'stopReason'`.as("resultStopReason"),
+        errorCode: heartbeatRuns.errorCode,
         ...heartbeatRunListResultColumns,
       })
       .from(heartbeatRuns)
@@ -3427,75 +3541,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const oldestRun =
       policy.maxSessionAgeHours > 0
         ? await getOldestRunForSession(agent.id, sessionId)
-        : runs[runs.length - 1] ?? latestRun;
-    const latestRawUsage = readRawUsageTotals(latestRun?.usageJson);
-    const sessionAgeHours =
-      latestRun && oldestRun
-        ? Math.max(
-            0,
-            (new Date(latestRun.createdAt).getTime() - new Date(oldestRun.createdAt).getTime()) / (1000 * 60 * 60),
-          )
-        : 0;
+        : runs[runs.length - 1] ?? runs[0];
 
-    let reason: string | null = null;
-    if (policy.maxSessionRuns > 0 && runs.length > policy.maxSessionRuns) {
-      reason = `session exceeded ${policy.maxSessionRuns} runs`;
-    } else if (
-      policy.maxRawInputTokens > 0 &&
-      latestRawUsage &&
-      latestRawUsage.inputTokens >= policy.maxRawInputTokens
-    ) {
-      reason =
-        `session raw input reached ${formatCount(latestRawUsage.inputTokens)} tokens ` +
-        `(threshold ${formatCount(policy.maxRawInputTokens)})`;
-    } else if (policy.maxSessionAgeHours > 0 && sessionAgeHours >= policy.maxSessionAgeHours) {
-      reason = `session age reached ${Math.floor(sessionAgeHours)} hours`;
-    }
-
-    if (!reason || !latestRun) {
-      return {
-        rotate: false,
-        reason: null,
-        handoffMarkdown: null,
-        previousRunId: latestRun?.id ?? null,
-      };
-    }
-
-    const latestSummary = summarizeHeartbeatRunListResultJson({
-      summary: latestRun?.resultSummary,
-      result: latestRun?.resultResult,
-      message: latestRun?.resultMessage,
-      error: latestRun?.resultError,
-      totalCostUsd: latestRun?.resultTotalCostUsd,
-      costUsd: latestRun?.resultCostUsd,
-      costUsdCamel: latestRun?.resultCostUsdCamel,
+    return evaluateSessionCompactionFromRuns({
+      agent,
+      sessionId,
+      issueId,
+      policy,
+      runs,
+      oldestRun,
+      continuationSummaryBody: input.continuationSummaryBody,
     });
-    const latestTextSummary =
-      readNonEmptyString(latestSummary?.summary) ??
-      readNonEmptyString(latestSummary?.result) ??
-      readNonEmptyString(latestSummary?.message) ??
-      readNonEmptyString(latestRun.error);
-
-    const handoffMarkdown = [
-      "Paperclip session handoff:",
-      `- Previous session: ${sessionId}`,
-      issueId ? `- Issue: ${issueId}` : "",
-      `- Rotation reason: ${reason}`,
-      latestTextSummary ? `- Last run summary: ${latestTextSummary}` : "",
-      input.continuationSummaryBody
-        ? `- Issue continuation summary: ${input.continuationSummaryBody.slice(0, 1_500)}`
-        : "",
-      "Continue from the current task state. Rebuild only the minimum context you need.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    return {
-      rotate: true,
-      reason,
-      handoffMarkdown,
-      previousRunId: latestRun.id,
-    };
   }
 
   async function resolveSessionBeforeForWakeup(

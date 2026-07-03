@@ -329,6 +329,39 @@ function mergeAdapterRecoveryMetadata(input: {
       : {}),
   };
 }
+
+const RECOVERY_ONLY_MODEL_PROFILES = new Set<ModelProfileKey | string>(["cheap", "status_only"]);
+
+function isRecoveryOnlyModelProfile(modelProfile: ModelProfileKey | null | undefined): boolean {
+  return modelProfile != null && RECOVERY_ONLY_MODEL_PROFILES.has(modelProfile);
+}
+
+function readFallbackAllowDeliverables(adapterConfig: Record<string, unknown> | null | undefined): boolean {
+  const fallbackConfig = parseObject(adapterConfig?.fallback);
+  return fallbackConfig.allowDeliverables === true;
+}
+
+function resolveRecoveryOnlyForRun(input: {
+  modelProfileApplication: ModelProfileApplication;
+  adapterResult?: AdapterExecutionResult | null;
+  adapterConfig?: Record<string, unknown> | null;
+}): boolean {
+  const requestedRecoveryOnly = isRecoveryOnlyModelProfile(input.modelProfileApplication.requested);
+  const appliedRecoveryOnly = isRecoveryOnlyModelProfile(input.modelProfileApplication.applied);
+
+  if (requestedRecoveryOnly || appliedRecoveryOnly) {
+    return true;
+  }
+
+  const fallbackUsed = input.adapterResult?.fallbackUsed === true || input.adapterResult?.resultJson?.fallbackUsed === true;
+  if (fallbackUsed) {
+    const allowDeliverables = readFallbackAllowDeliverables(input.adapterConfig ?? input.modelProfileApplication.adapterConfig);
+    return !allowDeliverables;
+  }
+
+  return false;
+}
+
 const RUNNING_ISSUE_WAKE_REASONS_REQUIRING_FOLLOWUP = new Set(["approval_approved"]);
 const SESSIONED_LOCAL_ADAPTERS = new Set([
   "claude_local",
@@ -7499,6 +7532,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     });
     const configSnapshot = buildExecutionWorkspaceConfigSnapshot(mergedConfig, selectedEnvironmentId);
     const executionRunConfig = stripWorkspaceRuntimeFromExecutionRunConfig(mergedConfig);
+    const recoveryOnly = resolveRecoveryOnlyForRun({
+      modelProfileApplication,
+      adapterConfig: mergedConfig,
+    });
+    if (recoveryOnly) {
+      await db
+        .update(heartbeatRuns)
+        .set({ recoveryOnly: true, updatedAt: new Date() })
+        .where(eq(heartbeatRuns.id, run.id));
+    }
     const { resolvedConfig, secretKeys, secretManifest } = await resolveExecutionRunAdapterConfig({
       companyId: agent.companyId,
       agentId: agent.id,
@@ -10612,6 +10655,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         .orderBy(desc(heartbeatRuns.startedAt))
         .limit(1);
       return run ?? null;
+    },
+
+    isRecoveryOnlyRun: async (runId: string) => {
+      const [run] = await db
+        .select({ recoveryOnly: heartbeatRuns.recoveryOnly })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, runId))
+        .limit(1);
+      return run?.recoveryOnly === true;
     },
 
     getActiveRunIssueSummaryForAgent: async (agentId: string) => {

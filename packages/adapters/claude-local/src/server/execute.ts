@@ -1084,9 +1084,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           costUsd: 0,
           resultJson: {
             summary: fallbackParsed.summary,
-            fallbackUsed: "moonshot_kimi",
+            fallbackUsed: true,
+            fallbackProvider: "moonshot_kimi",
             fallbackTriggeredByError: initialErrorMessage || null,
           },
+          fallbackUsed: true,
           summary: fallbackParsed.summary,
           clearSession: true,
         };

@@ -66,6 +66,11 @@ export interface AdapterRuntimeServiceReport {
 
 export type AdapterExecutionErrorFamily = "transient_upstream";
 
+/**
+ * Marker returned by adapters (e.g. claude_local Kimi fallback) to indicate that
+ * a cheap/recovery fallback model was used. The server uses this to mark the
+ * run as recovery_only unless adapterConfig.fallback.allowDeliverables is true.
+ */
 export interface AdapterExecutionResult {
   exitCode: number | null;
   signal: string | null;
@@ -88,6 +93,8 @@ export interface AdapterExecutionResult {
   billingType?: AdapterBillingType | null;
   costUsd?: number | null;
   resultJson?: Record<string, unknown> | null;
+  /** True when the adapter used a cheap/recovery fallback model (e.g. Kimi). */
+  fallbackUsed?: boolean;
   runtimeServices?: AdapterRuntimeServiceReport[];
   summary?: string | null;
   clearSession?: boolean;
@@ -146,7 +153,7 @@ export interface AdapterModel {
   label: string;
 }
 
-export type AdapterModelProfileKey = "cheap";
+export type AdapterModelProfileKey = "cheap" | "status_only" | "normal_model";
 
 export interface AdapterModelProfileDefinition {
   key: AdapterModelProfileKey;

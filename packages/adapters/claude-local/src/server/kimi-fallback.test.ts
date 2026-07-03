@@ -4,7 +4,22 @@ import {
   buildKimiFallbackArgs,
   parseKimiStreamJson,
   describeKimiFallback,
+  type KimiFallbackConfig,
 } from "./kimi-fallback.js";
+
+function makeKimiFallbackConfig(
+  overrides: Partial<KimiFallbackConfig> = {},
+): KimiFallbackConfig {
+  return {
+    enabled: true,
+    provider: "moonshot_kimi",
+    command: "kimi",
+    model: "kimi-for-coding",
+    timeoutSec: 300,
+    allowDeliverables: false,
+    ...overrides,
+  };
+}
 
 describe("readKimiFallbackConfig", () => {
   it("returns null when fallback block is absent", () => {
@@ -56,24 +71,12 @@ describe("readKimiFallbackConfig", () => {
 
 describe("buildKimiFallbackArgs", () => {
   it("produces base args without --model when model matches default", () => {
-    const args = buildKimiFallbackArgs({
-      enabled: true,
-      provider: "moonshot_kimi",
-      command: "kimi",
-      model: "kimi-for-coding",
-      timeoutSec: 300,
-    });
+    const args = buildKimiFallbackArgs(makeKimiFallbackConfig());
     expect(args).toEqual(["--print", "--output-format=stream-json", "--yolo", "--afk", "--model", "kimi-for-coding"]);
   });
 
   it("appends --model for non-default model", () => {
-    const args = buildKimiFallbackArgs({
-      enabled: true,
-      provider: "moonshot_kimi",
-      command: "kimi",
-      model: "kimi-k2.5",
-      timeoutSec: 300,
-    });
+    const args = buildKimiFallbackArgs(makeKimiFallbackConfig({ model: "kimi-k2.5" }));
     expect(args).toContain("--model");
     expect(args).toContain("kimi-k2.5");
   });
@@ -120,13 +123,7 @@ describe("parseKimiStreamJson", () => {
 
 describe("describeKimiFallback", () => {
   it("produces a key-free pretty description", () => {
-    const desc = describeKimiFallback({
-      enabled: true,
-      provider: "moonshot_kimi",
-      command: "kimi",
-      model: "kimi-for-coding",
-      timeoutSec: 300,
-    });
+    const desc = describeKimiFallback(makeKimiFallbackConfig());
     expect(desc).toBe("provider=moonshot_kimi command=kimi model=kimi-for-coding");
     expect(desc).not.toMatch(/sk-/);
   });

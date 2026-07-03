@@ -84,6 +84,7 @@ import {
 import { logger } from "../middleware/logger.js";
 import { conflict, forbidden, HttpError, notFound, unauthorized, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { recoveryOnlyGuard } from "./recovery-only-guard.js";
 import {
   assertNoAgentHostWorkspaceCommandMutation,
   collectIssueWorkspaceCommandPaths,
@@ -859,6 +860,7 @@ export function issueRoutes(
   });
   const feedback = feedbackService(db);
   const companiesSvc = companyService(db);
+  const recoveryOnlyWriteGuard = recoveryOnlyGuard(db);
   let searchSvc = opts.searchService ?? null;
   const getSearchService = () => {
     searchSvc ??= companySearchService(db);
@@ -2313,6 +2315,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, existing))) return;
     const activeRecoveryAction = await recoveryActionsSvc.getActiveForIssue(existing.companyId, existing.id);
     if (
@@ -2561,6 +2564,7 @@ export function issueRoutes(
         return;
       }
       assertCompanyAccess(req, issue.companyId);
+      await recoveryOnlyWriteGuard(req);
       if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
       const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
       if (!keyParsed.success) {
@@ -2650,6 +2654,7 @@ export function issueRoutes(
         return;
       }
       assertCompanyAccess(req, issue.companyId);
+      await recoveryOnlyWriteGuard(req);
       if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
       const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
       if (!keyParsed.success) {
@@ -2715,6 +2720,7 @@ export function issueRoutes(
         return;
       }
       assertCompanyAccess(req, issue.companyId);
+      await recoveryOnlyWriteGuard(req);
       if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
       const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
       if (!keyParsed.success) {
@@ -2759,6 +2765,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
     const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
@@ -2996,6 +3003,7 @@ export function issueRoutes(
         return;
       }
       assertCompanyAccess(req, issue.companyId);
+      await recoveryOnlyWriteGuard(req);
       if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
       if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
       const keyParsed = issueDocumentKeySchema.safeParse(String(req.params.key ?? "").trim().toLowerCase());
@@ -3186,6 +3194,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
     const product = await workProductsSvc.createForIssue(issue.id, issue.companyId, {
@@ -3230,6 +3239,7 @@ export function issueRoutes(
       res.status(404).json({ error: "Issue not found" });
       return;
     }
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
     const product = await workProductsSvc.update(id, req.body);
@@ -3271,6 +3281,7 @@ export function issueRoutes(
       res.status(404).json({ error: "Issue not found" });
       return;
     }
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
     const removed = await workProductsSvc.remove(id);
@@ -3447,6 +3458,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertCanManageIssueApprovalLinks(req, res, issue.companyId))) return;
 
@@ -3481,6 +3493,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertCanManageIssueApprovalLinks(req, res, issue.companyId))) return;
 
@@ -3506,6 +3519,7 @@ export function issueRoutes(
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     assertNoAgentHostWorkspaceCommandMutation(req, collectIssueWorkspaceCommandPaths(req.body));
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertCheapRecoveryIssueAssigneeProfileAllowed(req, res, { companyId }, req.body))) return;
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId, {
@@ -3611,6 +3625,7 @@ export function issueRoutes(
     }
     assertCompanyAccess(req, parent.companyId);
     assertNoAgentHostWorkspaceCommandMutation(req, collectIssueWorkspaceCommandPaths(req.body));
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertCheapRecoveryIssueAssigneeProfileAllowed(req, res, parent, req.body))) return;
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, parent.companyId, {
@@ -3714,6 +3729,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, sourceIssue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, sourceIssue))) return;
 
     for (const child of req.body.children as Array<typeof req.body.children[number]>) {
@@ -3907,6 +3923,7 @@ export function issueRoutes(
     }
     assertCompanyAccess(req, existing.companyId);
     assertNoAgentHostWorkspaceCommandMutation(req, collectIssueWorkspaceCommandPaths(req.body));
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, existing))) return;
     if (!(await assertCheapRecoveryIssueAssigneeProfileAllowed(req, res, existing, req.body))) return;
 
@@ -4919,6 +4936,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
 
     if (issue.projectId) {
       const project = await projectsSvc.getById(issue.projectId);
@@ -5142,6 +5160,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (req.actor.type === "agent") {
       if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     } else {
@@ -5471,6 +5490,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
 
     const comment = await svc.getComment(commentId);
@@ -5616,6 +5636,7 @@ export function issueRoutes(
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!assertStructuredCommentFieldsAllowed(req, res, {
       presentation: req.body.presentation,
@@ -6051,6 +6072,7 @@ export function issueRoutes(
       res.status(422).json({ error: "Issue does not belong to company" });
       return;
     }
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
 
@@ -6171,6 +6193,7 @@ export function issueRoutes(
       res.status(404).json({ error: "Issue not found" });
       return;
     }
+    await recoveryOnlyWriteGuard(req);
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
     if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
 

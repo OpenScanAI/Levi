@@ -15,6 +15,12 @@ export interface KimiFallbackConfig {
    * agentic heartbeat mode despite quota being available).
    */
   timeoutSec: number;
+  /**
+   * When true, a run that triggers this fallback is allowed to produce
+   * deliverable writes (issue edits, comments, documents). By default
+   * fallback runs are recovery-only.
+   */
+  allowDeliverables: boolean;
 }
 
 /**
@@ -48,6 +54,7 @@ export function readKimiFallbackConfig(rawConfig: Record<string, unknown>): Kimi
     command: asString(block.command, DEFAULT_COMMAND),
     model: asString(block.model, DEFAULT_MODEL),
     timeoutSec: asNumber(block.timeoutSec, 300),
+    allowDeliverables: asBoolean(block.allowDeliverables, false),
   };
 }
 

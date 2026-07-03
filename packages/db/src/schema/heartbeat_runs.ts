@@ -22,6 +22,7 @@ export const heartbeatRuns = pgTable(
     resultJson: jsonb("result_json").$type<Record<string, unknown>>(),
     sessionIdBefore: text("session_id_before"),
     sessionIdAfter: text("session_id_after"),
+    recoveryOnly: boolean("recovery_only").notNull().default(false),
     logStore: text("log_store"),
     logRef: text("log_ref"),
     logBytes: bigint("log_bytes", { mode: "number" }),

@@ -352,6 +352,17 @@ describe("execution workspace policy helpers", () => {
     expect(issueExecutionWorkspaceModeForPersistedWorkspace(undefined)).toBe("agent_default");
   });
 
+  it("forces PR workflow issues to isolated workspace when no explicit policy is set", () => {
+    expect(
+      resolveExecutionWorkspaceMode({
+        projectPolicy: null,
+        issueSettings: null,
+        legacyUseProjectWorkspace: null,
+        workflowType: "pr",
+      }),
+    ).toBe("isolated_workspace");
+  });
+
   it("disables project execution workspace policy when the instance flag is off", () => {
     expect(
       gateProjectExecutionWorkspacePolicy(

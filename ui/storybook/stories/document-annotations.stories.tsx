@@ -235,6 +235,7 @@ function makeIntegratedIssue(): Issue {
     description: null,
     status: "in_progress",
     workMode: "standard",
+    workflowType: "issue",
     priority: "medium",
     assigneeAgentId: null,
     assigneeUserId: null,

@@ -2122,6 +2122,7 @@ async function buildPaperclipWakePayload(input: {
         status: string;
         priority: string;
         workMode: string;
+        workflowType: string;
       }
     | null;
 }) {
@@ -2141,6 +2142,7 @@ async function buildPaperclipWakePayload(input: {
             status: issues.status,
             priority: issues.priority,
             workMode: issues.workMode,
+            workflowType: issues.workflowType,
           })
           .from(issues)
           .where(and(eq(issues.id, issueId), eq(issues.companyId, input.companyId)))
@@ -2363,6 +2365,7 @@ export function buildPaperclipTaskMarkdown(input: {
     identifier: string | null;
     title: string;
     workMode?: string | null;
+    workflowType?: string | null;
     description?: string | null;
   } | null;
   wakeComment?: {
@@ -2403,6 +2406,7 @@ export function buildPaperclipTaskMarkdown(input: {
     lines.push(
       `- Issue: ${quoteTaskScalar(issue.identifier || issue.id)}`,
       `- Title: ${quoteTaskScalar(issue.title)}`,
+      `- Workflow type: ${quoteTaskScalar(issue.workflowType ?? "issue")}`,
     );
     if (issue.workMode === "planning") {
       let directive = "Make the plan only. Do not write code or perform implementation work.";
@@ -2710,6 +2714,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         description: issues.description,
         status: issues.status,
         workMode: issues.workMode,
+        workflowType: issues.workflowType,
         priority: issues.priority,
         projectId: issues.projectId,
         projectWorkspaceId: issues.projectWorkspaceId,
@@ -7298,6 +7303,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       projectPolicy: projectExecutionWorkspacePolicy,
       issueSettings: issueExecutionWorkspaceSettings,
       legacyUseProjectWorkspace: issueAssigneeOverrides?.useProjectWorkspace ?? null,
+      workflowType: issueContext.workflowType,
     });
     const resolvedWorkspace = await resolveWorkspaceForRun(
       agent,
@@ -7313,6 +7319,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           status: issueContext.status,
           priority: issueContext.priority,
           workMode: issueContext.workMode,
+          workflowType: issueContext.workflowType,
           description: issueContext.description,
           projectId: issueContext.projectId,
           projectWorkspaceId: issueContext.projectWorkspaceId,
@@ -7346,6 +7353,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             status: issueRef.status,
             priority: issueRef.priority,
             workMode: issueRef.workMode,
+            workflowType: issueRef.workflowType,
           }
         : null,
     });
@@ -7361,6 +7369,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             identifier: issueRef.identifier,
             title: issueRef.title,
             workMode: issueRef.workMode,
+            workflowType: issueRef.workflowType,
             description: issueRef.description,
           }
         : null,
@@ -7380,6 +7389,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         title: issueRef.title,
         description: issueRef.description,
         workMode: issueRef.workMode,
+        workflowType: issueRef.workflowType,
       };
     } else {
       delete context.paperclipIssue;

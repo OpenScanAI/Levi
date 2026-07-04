@@ -276,6 +276,7 @@ export function resolveExecutionWorkspaceMode(input: {
   projectPolicy: ProjectExecutionWorkspacePolicy | null;
   issueSettings: IssueExecutionWorkspaceSettings | null;
   legacyUseProjectWorkspace: boolean | null;
+  workflowType?: string | null;
 }): ParsedExecutionWorkspaceMode {
   const issueMode = input.issueSettings?.mode;
   if (issueMode && issueMode !== "inherit" && issueMode !== "reuse_existing") {
@@ -289,6 +290,12 @@ export function resolveExecutionWorkspaceMode(input: {
   }
   if (input.legacyUseProjectWorkspace === false) {
     return "agent_default";
+  }
+  // PR workflows with no explicit config default to isolated workspace so
+  // they create a dedicated branch instead of committing to the current shared
+  // checkout branch (YAS-172 / YAS-64 churn reduction).
+  if (input.workflowType === "pr") {
+    return "isolated_workspace";
   }
   return "shared_workspace";
 }

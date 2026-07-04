@@ -67,6 +67,29 @@ export { environmentService } from "./environments.js";
 export { executionWorkspaceService } from "./execution-workspaces.js";
 export { workspaceOperationService } from "./workspace-operations.js";
 export { workProductService } from "./work-products.js";
+export {
+  buildPrWorkflowBlockedComment,
+  buildPrWorkflowEvidenceComment,
+  buildPrWorkflowEvidenceRecord,
+  buildPrWorkflowNoopComment,
+  buildPrWorkflowResumeComment,
+  buildPrWorkflowStepStatus,
+  computePrCommentFingerprint,
+  formatNoRemainingWorkMessage,
+  formatResumeMessage,
+  normalizePrCommentBody,
+  resolvePrWorkflowIdempotency,
+  resolvePrWorkflowStepState,
+  runPrWorkflowIdempotency,
+  shouldMarkDoneAfterAction,
+  type PrWorkflowIdempotencyAction,
+  type PrWorkflowIdempotencyInput,
+  type PrWorkflowIdempotencyResult,
+  type PrWorkflowStep,
+  type PrWorkflowStepEvidence,
+  type PrWorkflowStepResolution,
+  PR_WORKFLOW_STEPS,
+} from "./pr-workflow-idempotency.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";

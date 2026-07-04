@@ -20,6 +20,7 @@ import type {
   IssueRecoveryActionOwnerType,
   IssueRecoveryActionStatus,
   IssueWorkMode,
+  IssueWorkflowType,
   ModelProfileKey,
   IssueThreadInteractionContinuationPolicy,
   IssueThreadInteractionKind,
@@ -140,6 +141,7 @@ export interface AcceptedPlanDecompositionChild {
   description?: string | null;
   status: IssueStatus;
   workMode: IssueWorkMode;
+  workflowType: IssueWorkflowType;
   priority: IssuePriority;
   assigneeAgentId?: string | null;
   assigneeUserId?: string | null;
@@ -505,6 +507,7 @@ export interface Issue {
   description: string | null;
   status: IssueStatus;
   workMode: IssueWorkMode;
+  workflowType: IssueWorkflowType;
   priority: IssuePriority;
   assigneeAgentId: string | null;
   assigneeUserId: string | null;

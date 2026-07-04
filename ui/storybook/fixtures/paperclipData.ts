@@ -749,6 +749,7 @@ export function createIssue(overrides: Partial<Issue> = {}): Issue {
     updatedAt: recent(3),
     ...overrides,
     workMode: overrides.workMode ?? "standard",
+    workflowType: overrides.workflowType ?? "issue",
   };
 }
 

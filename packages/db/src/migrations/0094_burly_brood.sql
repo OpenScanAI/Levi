@@ -1,0 +1,1 @@
+ALTER TABLE "issues" ADD COLUMN "workflow_type" text DEFAULT 'issue' NOT NULL;

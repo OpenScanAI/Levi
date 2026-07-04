@@ -1902,6 +1902,7 @@ const issueListSelect = {
   `,
   status: issues.status,
   workMode: issues.workMode,
+  workflowType: issues.workflowType,
   priority: issues.priority,
   assigneeAgentId: issues.assigneeAgentId,
   assigneeUserId: issues.assigneeUserId,

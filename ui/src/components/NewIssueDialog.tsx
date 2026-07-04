@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo, type ChangeEvent, type CSSProperties, type DragEvent, type RefObject } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { IssueWorkMode } from "@paperclipai/shared";
+import type { IssueWorkMode, IssueWorkflowType } from "@paperclipai/shared";
 import { pickTextColorForSolidBg } from "@/lib/color-contrast";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
@@ -147,6 +147,14 @@ const ISSUE_WORK_MODE_OPTIONS: ReadonlyArray<{
 }> = [
   { value: "standard", label: "Standard", icon: Hammer },
   { value: "planning", label: "Planning", icon: ClipboardList },
+];
+
+const ISSUE_WORKFLOW_TYPE_OPTIONS: ReadonlyArray<{
+  value: IssueWorkflowType;
+  label: string;
+}> = [
+  { value: "issue", label: "Raise Issue" },
+  { value: "pr", label: "Raise PR" },
 ];
 
 function loadDraft(): IssueDraft | null {
@@ -430,6 +438,7 @@ export function NewIssueDialog() {
   const [executionWorkspaceMode, setExecutionWorkspaceMode] = useState<string>("shared_workspace");
   const [selectedExecutionWorkspaceId, setSelectedExecutionWorkspaceId] = useState("");
   const [workMode, setWorkMode] = useState<IssueWorkMode>("standard");
+  const [workflowType, setWorkflowType] = useState<IssueWorkflowType>("issue");
   const [expanded, setExpanded] = useState(false);
   const [dialogCompanyId, setDialogCompanyId] = useState<string | null>(null);
   const [stagedFiles, setStagedFiles] = useState<StagedIssueFile[]>([]);
@@ -450,6 +459,7 @@ export function NewIssueDialog() {
   const [statusOpen, setStatusOpen] = useState(false);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [workModeOpen, setWorkModeOpen] = useState(false);
+  const [workflowTypeOpen, setWorkflowTypeOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [companyOpen, setCompanyOpen] = useState(false);
   const descriptionEditorRef = useRef<MarkdownEditorRef>(null);
@@ -983,6 +993,7 @@ export function NewIssueDialog() {
       status,
       priority: priority || "medium",
       workMode,
+      workflowType,
       ...(selectedAssigneeAgentId ? { assigneeAgentId: selectedAssigneeAgentId } : {}),
       ...(selectedAssigneeUserId ? { assigneeUserId: selectedAssigneeUserId } : {}),
       ...(newIssueDefaults.parentId ? { parentId: newIssueDefaults.parentId } : {}),
@@ -1192,6 +1203,7 @@ export function NewIssueDialog() {
   );
   const currentWorkMode = ISSUE_WORK_MODE_OPTIONS[workMode === "planning" ? 1 : 0]!;
   const CurrentWorkModeIcon = currentWorkMode.icon;
+  const currentWorkflowType = ISSUE_WORKFLOW_TYPE_OPTIONS[workflowType === "pr" ? 1 : 0]!;
 
   return (
     <Dialog
@@ -1967,6 +1979,43 @@ export function NewIssueDialog() {
                   </button>
                 );
               })}
+            </PopoverContent>
+          </Popover>
+
+          {/* Raise as chip */}
+          <Popover open={workflowTypeOpen} onOpenChange={setWorkflowTypeOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                data-issue-workflow-type-chip={workflowType}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
+                  workflowType === "pr"
+                    ? "border-purple-500/60 bg-purple-500/15 text-purple-800 hover:bg-purple-500/25 dark:border-purple-500/50 dark:bg-purple-500/15 dark:text-purple-200 dark:hover:bg-purple-500/25"
+                    : "border-border text-muted-foreground hover:bg-accent/50",
+                )}
+              >
+                {currentWorkflowType.label}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-40 p-1" align="start">
+              {ISSUE_WORKFLOW_TYPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  data-issue-workflow-type={option.value}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-accent/50",
+                    option.value === workflowType && "bg-accent",
+                    option.value === "pr" && "text-purple-700 dark:text-purple-300",
+                  )}
+                  onClick={() => {
+                    setWorkflowType(option.value);
+                    setWorkflowTypeOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
             </PopoverContent>
           </Popover>
 

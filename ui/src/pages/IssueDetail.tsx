@@ -3620,12 +3620,19 @@ export function IssueDetail() {
           </div>
         </div>
 
-        <InlineEditor
-          value={issue.title}
-          onSave={(title) => updateIssue.mutateAsync({ title })}
-          as="h2"
-          className="text-xl font-bold"
-        />
+        <div className="flex items-center gap-2">
+          <InlineEditor
+            value={issue.title}
+            onSave={(title) => updateIssue.mutateAsync({ title })}
+            as="h2"
+            className="text-xl font-bold"
+          />
+          {issue.workflowType === "pr" ? (
+            <span className="inline-flex items-center rounded border border-purple-500/60 bg-purple-500/15 px-2 py-0.5 text-xs font-medium text-purple-800 dark:border-purple-500/50 dark:bg-purple-500/15 dark:text-purple-200">
+              PR
+            </span>
+          ) : null}
+        </div>
 
         <InlineEditor
           value={issue.description ?? ""}

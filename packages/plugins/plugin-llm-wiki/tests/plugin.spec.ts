@@ -569,6 +569,7 @@ function paperclipIssue(overrides: Partial<Issue> = {}): Issue {
     description: "Decide which Paperclip issues, comments, and documents can be ingested into the wiki.",
     status: "todo",
     workMode: "standard",
+    workflowType: "issue",
     priority: "medium",
     assigneeAgentId: null,
     assigneeUserId: null,

@@ -80,5 +80,10 @@
     "server",
     "ui",
     "cli"
-  ]
+  ],
+  "pnpm": {
+    "patchedDependencies": {
+      "hermes-paperclip-adapter@0.2.0": "patches/hermes-paperclip-adapter@0.2.0.patch"
+    }
+  }
 }

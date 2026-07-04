@@ -1,0 +1,204 @@
+diff --git a/dist/server/execute.js b/dist/server/execute.js
+index 93cddf8243271f5fb3ab101617f9114257e41328..cdfd251d5dc5270ede262770c74d3746597cf051 100644
+--- a/dist/server/execute.js
++++ b/dist/server/execute.js
+@@ -39,7 +39,9 @@ function cfgStringArray(v) {
+ // ---------------------------------------------------------------------------
+ const DEFAULT_PROMPT_TEMPLATE = `You are "{{agentName}}", an AI agent employee in a Paperclip-managed company.
+ 
+-IMPORTANT: Use \`terminal\` tool with \`curl\` for ALL Paperclip API calls (web_extract and browser cannot access localhost).
++IMPORTANT: Use "terminal" tool with "curl" for ALL Paperclip API calls (web_extract and browser cannot access localhost).
++The environment variable PAPERCLIP_API_KEY is already set for every run. Every Paperclip API curl command must include:
++  -H "Authorization: Bearer {{paperclipApiKey}}"
+ 
+ Your Paperclip identity:
+   Agent ID: {{agentId}}
+@@ -51,25 +53,43 @@ Your Paperclip identity:
+ 
+ Issue ID: {{taskId}}
+ Title: {{taskTitle}}
+ 
+ {{taskBody}}
+ 
+ ## Workflow
+ 
+-1. Work on the task using your tools
+-2. When done, mark the issue as completed:
+-   \`curl -s -X PATCH "{{paperclipApiUrl}}/issues/{{taskId}}" -H "Content-Type: application/json" -d '{"status":"done"}'\`
+-3. Post a completion comment on the issue summarizing what you did:
+-   \`curl -s -X POST "{{paperclipApiUrl}}/issues/{{taskId}}/comments" -H "Content-Type: application/json" -d '{"body":"DONE: <your summary here>"}'\`
+-4. If this issue has a parent (check the issue body or comments for references like TRA-XX), post a brief notification on the parent issue so the parent owner knows:
+-   \`curl -s -X POST "{{paperclipApiUrl}}/issues/PARENT_ISSUE_ID/comments" -H "Content-Type: application/json" -d '{"body":"{{agentName}} completed {{taskId}}. Summary: <brief>"}'\`
++1. Work on the task using your tools.
++2. BEFORE marking done, read the issue status and comments. If the issue is already \`done\` or a recent comment already reports completion, STOP and exit cleanly — do not re-post completion comments or re-mark the issue.
++3. When done, mark the issue as completed:
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" -X PATCH "{{paperclipApiUrl}}/issues/{{taskId}}" -H "Content-Type: application/json" -d '{"status":"done"}'"
++4. Post a completion comment on the issue summarizing what you did:
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" -X POST "{{paperclipApiUrl}}/issues/{{taskId}}/comments" -H "Content-Type: application/json" -d '{"body":"DONE: <your summary here>"}'"
++5. If this issue has a parent (check the issue body or comments for references like TRA-XX), post a brief notification on the parent issue so the parent owner knows:
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" -X POST "{{paperclipApiUrl}}/issues/PARENT_ISSUE_ID/comments" -H "Content-Type: application/json" -d '{"body":"{{agentName}} completed {{taskId}}. Summary: <brief>"}'"
+ {{/taskId}}
+ 
+ {{#commentId}}
+ ## Comment on This Issue
+ 
+ Someone commented. Read it:
+-   \`curl -s "{{paperclipApiUrl}}/issues/{{taskId}}/comments/{{commentId}}" | python3 -m json.tool\`
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" "{{paperclipApiUrl}}/issues/{{taskId}}/comments/{{commentId}}" | python3 -m json.tool"
+ 
+ Address the comment, POST a reply if needed, then continue working.
+ {{/commentId}}
+@@ -78,30 +99,33 @@ Address the comment, POST a reply if needed, then continue working.
+ ## Heartbeat Wake — Check for Work
+ 
+ 1. List ALL open issues assigned to you (todo, backlog, in_progress):
+-   \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?assigneeAgentId={{agentId}}" | python3 -c "import sys,json;issues=json.loads(sys.stdin.read());[print(f'{i[\"identifier\"]} {i[\"status\"]:>12} {i[\"priority\"]:>6} {i[\"title\"]}') for i in issues if i['status'] not in ('done','cancelled')]" \`
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" "{{paperclipApiUrl}}/companies/{{companyId}}/issues?assigneeAgentId={{agentId}}" | python3 -c "import sys,json;issues=json.loads(sys.stdin.read());[print(f'{i[\"identifier\"]} {i[\"status\"]:>12} {i[\"priority\"]:>6} {i[\"title\"]}') for i in issues if i['status'] not in ('done','cancelled')]" ""
+ 
+ 2. If issues found, pick the highest priority one that is not done/cancelled and work on it:
+-   - Read the issue details: \`curl -s "{{paperclipApiUrl}}/issues/ISSUE_ID"\`
++   - Read the issue details: "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" "{{paperclipApiUrl}}/issues/ISSUE_ID""
+    - Do the work in the project directory: {{projectName}}
+    - When done, mark complete and post a comment (see Workflow steps 2-4 above)
+ 
+ 3. If no issues assigned to you, check for unassigned issues:
+-   \`curl -s "{{paperclipApiUrl}}/companies/{{companyId}}/issues?status=backlog" | python3 -c "import sys,json;issues=json.loads(sys.stdin.read());[print(f'{i[\"identifier\"]} {i[\"title\"]}') for i in issues if not i.get('assigneeAgentId')]" \`
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" "{{paperclipApiUrl}}/companies/{{companyId}}/issues?status=backlog" | python3 -c "import sys,json;issues=json.loads(sys.stdin.read());[print(f'{i[\"identifier\"]} {i[\"title\"]}') for i in issues if not i.get('assigneeAgentId')]" ""
+    If you find a relevant issue, assign it to yourself:
+-   \`curl -s -X PATCH "{{paperclipApiUrl}}/issues/ISSUE_ID" -H "Content-Type: application/json" -d '{"assigneeAgentId":"{{agentId}}","status":"todo"}'\`
++   "curl -s -H "Authorization: Bearer {{paperclipApiKey}}" -X PATCH "{{paperclipApiUrl}}/issues/ISSUE_ID" -H "Content-Type: application/json" -d '{"assigneeAgentId":"{{agentId}}","status":"todo"}'"
+ 
+ 4. If truly nothing to do, report briefly what you checked.
+ {{/noTask}}`;
+ function buildPrompt(ctx, config) {
+     const template = cfgString(config.promptTemplate) || DEFAULT_PROMPT_TEMPLATE;
+-    const taskId = cfgString(ctx.config?.taskId);
+-    const taskTitle = cfgString(ctx.config?.taskTitle) || "";
+-    const taskBody = cfgString(ctx.config?.taskBody) || "";
++    const issue = ctx.config?.paperclipIssue;
++    const taskMarkdown = cfgString(ctx.config?.paperclipTaskMarkdown) || "";
++    const taskId = cfgString(ctx.config?.taskId) || cfgString(issue?.identifier) || "";
++    const taskTitle = cfgString(issue?.title) || cfgString(ctx.config?.taskTitle) || "";
++    const taskBody = taskMarkdown || cfgString(issue?.description) || cfgString(ctx.config?.taskBody) || "";
+     const commentId = cfgString(ctx.config?.commentId) || "";
+     const wakeReason = cfgString(ctx.config?.wakeReason) || "";
+     const agentName = ctx.agent?.name || "Hermes Agent";
+     const companyName = cfgString(ctx.config?.companyName) || "";
+     const projectName = cfgString(ctx.config?.projectName) || "";
+     // Build API URL — ensure it has the /api path
+     let paperclipApiUrl = cfgString(config.paperclipApiUrl) ||
+         process.env.PAPERCLIP_API_URL ||
+@@ -123,15 +157,21 @@ function buildPrompt(ctx, config) {
+         wakeReason,
+         projectName,
+         paperclipApiUrl,
++        paperclipApiKey: ctx.authToken || "",
+     };
+     // Handle conditional sections: {{#key}}...{{/key}}
+     let rendered = template;
+-    // {{#taskId}}...{{/taskId}} — include if task is assigned
+-    rendered = rendered.replace(/\{\{#taskId\}\}([\s\S]*?)\{\{\/taskId\}\}/g, taskId ? "$1" : "");
+-    // {{#noTask}}...{{/noTask}} — include if no task
+-    rendered = rendered.replace(/\{\{#noTask\}\}([\s\S]*?)\{\{\/noTask\}\}/g, taskId ? "" : "$1");
+-    // {{#commentId}}...{{/commentId}} — include if comment exists
+-    rendered = rendered.replace(/\{\{#commentId\}\}([\s\S]*?)\{\{\/commentId\}\}/g, commentId ? "$1" : "");
++    const replaceConditional = (tpl, key, include) => {
++        const re = new RegExp("{{#" + key + "}}([\\s\\S]*?){{/" + key + "}}", "g");
++        return tpl.replace(re, include ? "$1" : "");
++    };
++    rendered = replaceConditional(rendered, "taskId", !!taskId);
++    rendered = replaceConditional(rendered, "noTask", !taskId);
++    rendered = replaceConditional(rendered, "commentId", !!commentId);
+     // Replace remaining {{variable}} placeholders
+     return renderTemplate(rendered, vars);
+ }
+@@ -241,6 +281,12 @@ function parseHermesOutput(stdout, stderr) {
+ // Main execute
+ // ---------------------------------------------------------------------------
+ export async function execute(ctx) {
++    // Compatibility: Paperclip server passes the run context as ctx.context; this
++    // adapter historically expects it in ctx.config. Merge context into config so
++    // workspace, task, and issue metadata are available to existing references.
++    if (ctx.context && typeof ctx.context === "object") {
++        ctx.config = { ...ctx.config, ...ctx.context };
++    }
+     const config = (ctx.agent?.adapterConfig ?? {});
+     // ── Resolve configuration ──────────────────────────────────────────────
+     const hermesCmd = cfgString(config.hermesCommand) || HERMES_CLI;
+@@ -250,11 +296,12 @@ export async function execute(ctx) {
+     const graceSec = cfgNumber(config.graceSec) || DEFAULT_GRACE_SEC;
+     const toolsets = cfgString(config.toolsets) || cfgStringArray(config.enabledToolsets)?.join(",");
+     const extraArgs = cfgStringArray(config.extraArgs);
+-    const persistSession = cfgBoolean(config.persistSession) !== false;
++    const persistSession = cfgBoolean(config.persistSession) === true;
+     const worktreeMode = cfgBoolean(config.worktreeMode) === true;
+     const checkpoints = cfgBoolean(config.checkpoints) === true;
+     // ── Build prompt ───────────────────────────────────────────────────────
+     const prompt = buildPrompt(ctx, config);
++    await ctx.onLog("stdout", `[hermes] Prompt length: ${prompt.length} chars\n`);
+     // ── Build command args ─────────────────────────────────────────────────
+     // Use -Q (quiet) to get clean output: just response + session_id line
+     const useQuiet = cfgBoolean(config.quiet) !== false; // default true
+@@ -280,10 +327,10 @@ export async function execute(ctx) {
+     // Tag sessions as "tool" source so they don't clutter the user's session history.
+     // Requires hermes-agent >= PR #3255 (feat/session-source-tag).
+     args.push("--source", "tool");
+-    // Session resume
++    // Session resume: always ignore previous sessions for Paperclip runs so each issue gets a fresh conversation.
+     const prevSessionId = cfgString(ctx.runtime?.sessionParams?.sessionId);
+-    if (persistSession && prevSessionId) {
+-        args.push("--resume", prevSessionId);
++    if (prevSessionId) {
++        await ctx.onLog("stdout", `[hermes] Ignoring persisted session ${prevSessionId}\n`);
+     }
+     if (extraArgs?.length) {
+         args.push(...extraArgs);
+@@ -300,10 +347,29 @@ export async function execute(ctx) {
+         env.PAPERCLIP_TASK_ID = taskId;
+     const userEnv = config.env;
+     if (userEnv && typeof userEnv === "object") {
+-        Object.assign(env, userEnv);
++        for (const [key, value] of Object.entries(userEnv)) {
++            if (value && typeof value === "object" && "value" in value) {
++                env[key] = String(value.value ?? "");
++            } else {
++                env[key] = value;
++            }
++        }
++    }
++    // Propagate the short-lived local agent JWT so curl commands authenticate as the agent
++    // instead of falling back to the local-board user. This is applied after user env so the
++    // adapter-provided token is authoritative.
++    if (ctx.authToken) {
++        env.PAPERCLIP_API_KEY = ctx.authToken;
+     }
+     // ── Resolve working directory ──────────────────────────────────────────
+-    const cwd = cfgString(config.cwd) || cfgString(ctx.config?.workspaceDir) || ".";
++    const configuredCwd = cfgString(config.cwd) || cfgString(ctx.config?.workspaceDir) || cfgString(ctx.context?.workspaceDir);
++    const workspaceCwd = cfgString(ctx.context?.paperclipWorkspace?.cwd) ||
++        cfgString(ctx.context?.paperclipWorkspace?.realization?.local?.path) ||
++        cfgString(ctx.context?.paperclipWorkspace?.realization?.rebuild?.localPath) ||
++        cfgString(ctx.context?.paperclipWorkspace?.realization?.rebuild?.metadata?.source?.localPath);
++    const cwd = configuredCwd || workspaceCwd || ".";
++    await ctx.onLog("stdout", `[hermes] workspace resolution: configuredCwd=${configuredCwd ?? "<unset>"}, workspaceDir=${ctx.config?.workspaceDir ?? ctx.context?.workspaceDir ?? "<unset>"}, paperclipWorkspace.cwd=${ctx.context?.paperclipWorkspace?.cwd ?? "<unset>"}, process.cwd()=${process.cwd()}\n`);
++    await ctx.onLog("stdout", `[hermes] resolved cwd=${cwd}\n`);
+     try {
+         await ensureAbsoluteDirectory(cwd);
+     }
+diff --git a/dist/server/index.js b/dist/server/index.js
+index 881e4836b6737a47481002200b854e26da8f906c..d40efb5d0099630bda707969f9f743cd75d9d51b 100644
+--- a/dist/server/index.js
++++ b/dist/server/index.js
+@@ -5,6 +5,12 @@ export { execute } from "./execute.js";
+ export { testEnvironment } from "./test.js";
+ export { detectModel } from "detect-model.js";
+ export { listHermesSkills as listSkills, syncHermesSkills as syncSkills, resolveHermesDesiredSkillNames as resolveDesiredSkillNames, } from "./skills.js";
++
++// Allow the Paperclip heartbeat service to inject a short-lived local agent
++// JWT into the execution context. This is the same flag used by the built-in
++// local adapters (claude-local, codex-local, etc.).
++export const supportsLocalAgentJwt = true;
++
+ function readNonEmptyString(value) {
+     return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+ }

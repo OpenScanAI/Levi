@@ -17,6 +17,7 @@ export interface AgentConfigOverlay {
   heartbeat: Record<string, unknown>;
   runtime: Record<string, unknown>;
   modelProfiles?: { cheap?: AgentModelProfileOverlay };
+  budget?: { budgetDailyCents?: number; budgetMonthlyCents?: number };
 }
 
 const ADAPTER_AGNOSTIC_KEYS = [
@@ -112,6 +113,15 @@ export function buildAgentUpdatePatch(agent: Agent, overlay: AgentConfigOverlay)
 
   if (Object.keys(overlay.runtime).length > 0) {
     Object.assign(patch, overlay.runtime);
+  }
+
+  if (overlay.budget && Object.keys(overlay.budget).length > 0) {
+    if (overlay.budget.budgetDailyCents !== undefined) {
+      patch.budgetDailyCents = overlay.budget.budgetDailyCents;
+    }
+    if (overlay.budget.budgetMonthlyCents !== undefined) {
+      patch.budgetMonthlyCents = overlay.budget.budgetMonthlyCents;
+    }
   }
 
   return patch;

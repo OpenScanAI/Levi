@@ -131,6 +131,8 @@ function makeAgent(overrides: Partial<Agent>): Agent {
     adapterType: "process",
     adapterConfig: {},
     runtimeConfig: {},
+    budgetDailyCents: 0,
+    spentDailyCents: 0,
     budgetMonthlyCents: 0,
     spentMonthlyCents: 0,
     pauseReason: null,

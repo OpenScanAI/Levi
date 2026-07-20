@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lt, inArray, ne, not, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -23,6 +23,8 @@ import type {
 } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
 import { logActivity } from "./activity-log.js";
+import { RECOVERY_MODEL_PROFILE_KEY } from "./recovery/model-profile-hint.js";
+import { parseObject } from "../adapters/utils.js";
 
 type ScopeRecord = {
   companyId: string;
@@ -44,6 +46,44 @@ export type BudgetServiceHooks = {
   cancelWorkForScope?: (scope: BudgetEnforcementScope) => Promise<void>;
 };
 
+export function parseBypassAgentIds(envValue: string | undefined): Set<string> {
+  if (!envValue) return new Set();
+  return new Set(
+    envValue
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+function currentUtcDayWindow(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const day = now.getUTCDate();
+  const start = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month, day + 1, 0, 0, 0, 0));
+  return { start, end };
+}
+
+export function msUntilNextUtcDay(now = new Date()) {
+  const { end } = currentUtcDayWindow(now);
+  return end.getTime() - now.getTime();
+}
+
+export async function resetAgentDailySpend(db: Db) {
+  const { start, end } = currentUtcDayWindow();
+  await db
+    .update(agents)
+    .set({ spentDailyCents: 0, throttleReason: null, updatedAt: new Date() })
+    .where(
+      or(
+        gt(agents.spentDailyCents, 0),
+        eq(agents.throttleReason, "BUDGET_EXCEEDED"),
+      ),
+    );
+  return { windowStart: start, windowEnd: end };
+}
+
 function currentUtcMonthWindow(now = new Date()) {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth();
@@ -58,6 +98,9 @@ function resolveWindow(windowKind: BudgetWindowKind, now = new Date()) {
       start: new Date(Date.UTC(1970, 0, 1, 0, 0, 0, 0)),
       end: new Date(Date.UTC(9999, 0, 1, 0, 0, 0, 0)),
     };
+  }
+  if (windowKind === "calendar_day_utc") {
+    return currentUtcDayWindow(now);
   }
   return currentUtcMonthWindow(now);
 }
@@ -492,6 +535,94 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
     );
   }
 
+  async function getAgentBudgetBlock(
+    companyId: string,
+    agentId: string,
+    options?: { modelProfile?: string | null; override?: boolean },
+  ) {
+    const agent = await db
+      .select({
+        budgetDailyCents: agents.budgetDailyCents,
+        spentDailyCents: agents.spentDailyCents,
+        budgetMonthlyCents: agents.budgetMonthlyCents,
+        spentMonthlyCents: agents.spentMonthlyCents,
+        runtimeConfig: agents.runtimeConfig,
+      })
+      .from(agents)
+      .where(eq(agents.id, agentId))
+      .then((rows) => rows[0] ?? null);
+    if (!agent) return null;
+
+    const runtimeBudgets = parseObject(agent.runtimeConfig?.budgets);
+    const dailyCap =
+      typeof runtimeBudgets.dailyCents === "number" && Number.isFinite(runtimeBudgets.dailyCents)
+        ? Math.max(0, runtimeBudgets.dailyCents)
+        : agent.budgetDailyCents > 0
+          ? agent.budgetDailyCents
+          : Number(process.env.LEVI_DEFAULT_AGENT_DAILY_BUDGET_CENTS ?? 500);
+    const monthlyCap =
+      typeof runtimeBudgets.monthlyCents === "number" && Number.isFinite(runtimeBudgets.monthlyCents)
+        ? Math.max(0, runtimeBudgets.monthlyCents)
+        : agent.budgetMonthlyCents > 0
+          ? agent.budgetMonthlyCents
+          : 0;
+
+    const isRecovery = options?.modelProfile === RECOVERY_MODEL_PROFILE_KEY;
+    const effectiveDailyCap = isRecovery ? Math.floor(dailyCap / 2) : dailyCap;
+
+    if (options?.override) {
+      await logActivity(db, {
+        companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId,
+        runId: null,
+        action: "agent.budget_override_used",
+        entityType: "agent",
+        entityId: agentId,
+        details: { window: "daily" },
+      });
+      return null;
+    }
+
+    const { start: dayStart, end: dayEnd } = resolveWindow("calendar_day_utc");
+    const [{ dailyTotal }] = await db
+      .select({ dailyTotal: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::double precision` })
+      .from(costEvents)
+      .where(
+        and(
+          eq(costEvents.companyId, companyId),
+          eq(costEvents.agentId, agentId),
+          gte(costEvents.occurredAt, dayStart),
+          lt(costEvents.occurredAt, dayEnd),
+        ),
+      );
+
+    if (effectiveDailyCap > 0 && Number(dailyTotal) >= effectiveDailyCap) {
+      return {
+        scopeType: "agent" as const,
+        scopeId: agentId,
+        scopeName: "",
+        reason: `Agent daily budget exceeded ($${(Number(dailyTotal) / 100).toFixed(2)} / $${(effectiveDailyCap / 100).toFixed(2)}).`,
+        code: "BUDGET_EXCEEDED" as const,
+        window: "daily" as const,
+      };
+    }
+
+    if (monthlyCap > 0 && agent.spentMonthlyCents >= monthlyCap) {
+      return {
+        scopeType: "agent" as const,
+        scopeId: agentId,
+        scopeName: "",
+        reason: `Agent monthly budget exceeded ($${(agent.spentMonthlyCents / 100).toFixed(2)} / $${(monthlyCap / 100).toFixed(2)}).`,
+        code: "BUDGET_EXCEEDED" as const,
+        window: "monthly" as const,
+      };
+    }
+
+    return null;
+  }
+
   return {
     listPolicies: async (companyId: string): Promise<BudgetPolicy[]> => {
       const rows = await listPolicyRows(companyId);
@@ -716,8 +847,15 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
     getInvocationBlock: async (
       companyId: string,
       agentId: string,
-      context?: { issueId?: string | null; projectId?: string | null },
+      context?: { issueId?: string | null; projectId?: string | null; modelProfile?: string | null },
     ) => {
+      const bypassAgentIds = parseBypassAgentIds(process.env.PAPERCLIP_BUDGET_BYPASS_AGENT_IDS);
+      const agentBudgetBlock = await getAgentBudgetBlock(companyId, agentId, {
+        modelProfile: context?.modelProfile,
+        override: bypassAgentIds.has(agentId),
+      });
+      if (agentBudgetBlock) return agentBudgetBlock;
+
       const agent = await db
         .select({
           status: agents.status,

@@ -32,6 +32,8 @@ function makeAgent(): Agent {
         intervalSec: 300,
       },
     },
+    budgetDailyCents: 0,
+    spentDailyCents: 0,
     budgetMonthlyCents: 0,
     spentMonthlyCents: 0,
     pauseReason: null,

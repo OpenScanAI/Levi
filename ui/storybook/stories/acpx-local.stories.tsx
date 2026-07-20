@@ -538,6 +538,8 @@ function buildAcpxAgent({
       },
     },
     runtimeConfig: {},
+    budgetDailyCents: 0,
+    spentDailyCents: 0,
     budgetMonthlyCents: 100_000,
     spentMonthlyCents: 0,
     pauseReason: null,

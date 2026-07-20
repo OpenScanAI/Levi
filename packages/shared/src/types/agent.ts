@@ -85,6 +85,8 @@ export interface Agent {
   adapterConfig: Record<string, unknown>;
   runtimeConfig: AgentRuntimeConfig;
   defaultEnvironmentId?: string | null;
+  budgetDailyCents: number;
+  spentDailyCents: number;
   budgetMonthlyCents: number;
   spentMonthlyCents: number;
   pauseReason: PauseReason | null;
@@ -92,6 +94,7 @@ export interface Agent {
   permissions: AgentPermissions;
   lastHeartbeatAt: Date | null;
   metadata: Record<string, unknown> | null;
+  throttleReason?: "BUDGET_EXCEEDED" | "NO_CONTEXT" | null;
   createdAt: Date;
   updatedAt: Date;
 }

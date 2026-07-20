@@ -1465,10 +1465,45 @@ function resolveLedgerBiller(result: AdapterExecutionResult): string {
   return readNonEmptyString(result.biller) ?? readNonEmptyString(result.provider) ?? "unknown";
 }
 
-function normalizeBilledCostCents(costUsd: number | null | undefined, billingType: BillingType): number {
-  if (billingType === "subscription_included") return 0;
+export function normalizeBilledCostCents(costUsd: number | null | undefined, billingType: BillingType): number {
   if (typeof costUsd !== "number" || !Number.isFinite(costUsd)) return 0;
   return Math.max(0, Math.round(costUsd * 100));
+}
+
+type NoContextBlock = { reason: string; code: "NO_CONTEXT" };
+
+type NoContextResult = { block: NoContextBlock | null; overrideUsed: boolean };
+
+type NoContextGuardInput = {
+  agent: Pick<typeof agents.$inferSelect, "runtimeConfig">;
+  contextSnapshot: Record<string, unknown>;
+  source: string;
+  reason: string | null;
+};
+
+export function resolveNoContextBlock(input: NoContextGuardInput): NoContextResult {
+  const agentRuntimeConfig = parseObject(input.agent.runtimeConfig);
+  const budgets = parseObject(agentRuntimeConfig.budgets);
+  const envOverride = process.env.LEVI_ALLOW_NO_CONTEXT_RUNS === "1";
+  const runtimeOverride = budgets.allowNoContextRuns === true;
+  const overrideUsed = envOverride || runtimeOverride;
+  if (overrideUsed) return { block: null, overrideUsed: true };
+
+  const hasIssueId = Boolean(readNonEmptyString(input.contextSnapshot.issueId));
+  const hasTaskId = Boolean(readNonEmptyString(input.contextSnapshot.taskId));
+  const hasTaskKey = Boolean(readNonEmptyString(input.contextSnapshot.taskKey));
+  const hasResume = Boolean(readNonEmptyString(input.contextSnapshot.resumeFromRunId));
+  const hasExplicitWake = input.source !== "timer";
+
+  if (hasResume || hasIssueId || hasTaskId || hasTaskKey || hasExplicitWake) return { block: null, overrideUsed: false };
+
+  return {
+    block: {
+      reason: "Run started with no loaded context (no issue, task, or resume session).",
+      code: "NO_CONTEXT",
+    },
+    overrideUsed: false,
+  };
 }
 
 async function resolveLedgerScopeForRun(
@@ -9310,13 +9345,81 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const budgetBlock = await budgets.getInvocationBlock(agent.companyId, agentId, {
       issueId,
       projectId,
+      modelProfile: readContextModelProfile(enrichedContextSnapshot),
     });
     if (budgetBlock) {
       await writeSkippedRequest("budget.blocked");
+      await db
+        .update(agents)
+        .set({ throttleReason: "BUDGET_EXCEEDED", updatedAt: new Date() })
+        .where(eq(agents.id, agentId));
+      const blockCode = (budgetBlock as any).code ?? null;
+      const blockWindow = (budgetBlock as any).window ?? null;
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId,
+        runId: null,
+        action: "agent.budget_exceeded",
+        entityType: "agent",
+        entityId: agentId,
+        details: { reason: budgetBlock.reason, code: blockCode, window: blockWindow },
+      });
       throw conflict(budgetBlock.reason, {
         scopeType: budgetBlock.scopeType,
         scopeId: budgetBlock.scopeId,
+        code: blockCode,
       });
+    }
+
+    const noContextResult = resolveNoContextBlock({ agent, contextSnapshot: enrichedContextSnapshot, source, reason });
+    if (noContextResult.block) {
+      await writeSkippedRequest("no_context.blocked");
+      await db
+        .update(agents)
+        .set({ throttleReason: "NO_CONTEXT", updatedAt: new Date() })
+        .where(eq(agents.id, agentId));
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId,
+        runId: null,
+        action: "agent.no_context_run_blocked",
+        entityType: "agent",
+        entityId: agentId,
+        details: { source, reason, triggerDetail },
+      });
+      throw conflict(noContextResult.block.reason, {
+        code: "NO_CONTEXT",
+      });
+    }
+
+    if (noContextResult.overrideUsed) {
+      await logActivity(db, {
+        companyId: agent.companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId,
+        runId: null,
+        action: "agent.no_context_run_override_used",
+        entityType: "agent",
+        entityId: agentId,
+        details: {
+          source,
+          reason,
+          triggerDetail,
+          envOverride: process.env.LEVI_ALLOW_NO_CONTEXT_RUNS === "1",
+        },
+      });
+    }
+
+    if (agent.throttleReason === "NO_CONTEXT") {
+      await db
+        .update(agents)
+        .set({ throttleReason: null, updatedAt: new Date() })
+        .where(eq(agents.id, agentId));
     }
 
     if (

@@ -78,6 +78,10 @@ export const statusBadge: Record<string, string> = {
   blocked: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
   done: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300",
   cancelled: "bg-muted text-muted-foreground",
+
+  // Throttle reasons
+  BUDGET_EXCEEDED: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+  NO_CONTEXT: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
 };
 
 export const statusBadgeDefault = "bg-muted text-muted-foreground";

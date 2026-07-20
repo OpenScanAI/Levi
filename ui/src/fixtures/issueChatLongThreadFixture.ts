@@ -34,6 +34,8 @@ function createAgent(id: string, name: string, icon: string, urlKey: string): Ag
     adapterType: "codex_local",
     adapterConfig: {},
     runtimeConfig: {},
+    budgetDailyCents: 0,
+    spentDailyCents: 0,
     budgetMonthlyCents: 0,
     spentMonthlyCents: 0,
     lastHeartbeatAt: null,

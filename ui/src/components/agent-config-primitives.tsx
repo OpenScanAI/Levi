@@ -60,6 +60,7 @@ export const help: Record<string, string> = {
   maxTurnContinuationMaxAttempts: "Maximum automatic continuations after one max-turn stop. This is separate from max turns per run.",
   maxTurnContinuationDelaySec: "Seconds to wait before starting each max-turn continuation.",
   budgetMonthlyCents: "Monthly spending limit in cents. 0 means no limit.",
+  budgetDailyCents: "Daily spending limit in cents. 0 means no limit.",
 };
 
 import { getAdapterLabels } from "../adapters/adapter-display-registry";

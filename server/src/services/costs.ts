@@ -26,11 +26,43 @@ function currentUtcMonthWindow(now = new Date()) {
   };
 }
 
+function currentUtcDayWindow(now = new Date()) {
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth();
+  const date = now.getUTCDate();
+  return {
+    start: new Date(Date.UTC(year, month, date, 0, 0, 0, 0)),
+    end: new Date(Date.UTC(year, month, date + 1, 0, 0, 0, 0)),
+  };
+}
+
 async function getMonthlySpendTotal(
   db: Db,
   scope: { companyId: string; agentId?: string | null },
 ) {
   const { start, end } = currentUtcMonthWindow();
+  const conditions = [
+    eq(costEvents.companyId, scope.companyId),
+    gte(costEvents.occurredAt, start),
+    lt(costEvents.occurredAt, end),
+  ];
+  if (scope.agentId) {
+    conditions.push(eq(costEvents.agentId, scope.agentId));
+  }
+  const [row] = await db
+    .select({
+      total: sumAsNumber(costEvents.costCents),
+    })
+    .from(costEvents)
+    .where(and(...conditions));
+  return Number(row?.total ?? 0);
+}
+
+async function getDailySpendTotal(
+  db: Db,
+  scope: { companyId: string; agentId?: string | null },
+) {
+  const { start, end } = currentUtcDayWindow();
   const conditions = [
     eq(costEvents.companyId, scope.companyId),
     gte(costEvents.occurredAt, start),
@@ -75,15 +107,17 @@ export function costService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
         .returning()
         .then((rows) => rows[0]);
 
-      const [agentMonthSpend, companyMonthSpend] = await Promise.all([
+      const [agentMonthSpend, companyMonthSpend, agentDaySpend] = await Promise.all([
         getMonthlySpendTotal(db, { companyId, agentId: event.agentId }),
         getMonthlySpendTotal(db, { companyId }),
+        getDailySpendTotal(db, { companyId, agentId: event.agentId }),
       ]);
 
       await db
         .update(agents)
         .set({
           spentMonthlyCents: agentMonthSpend,
+          spentDailyCents: agentDaySpend,
           updatedAt: new Date(),
         })
         .where(eq(agents.id, event.agentId));

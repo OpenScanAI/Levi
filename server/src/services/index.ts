@@ -29,7 +29,7 @@ export { issueRecoveryActionService } from "./issue-recovery-actions.js";
 export { goalService } from "./goals.js";
 export { activityService, type ActivityFilters } from "./activity.js";
 export { approvalService } from "./approvals.js";
-export { budgetService } from "./budgets.js";
+export { budgetService, resetAgentDailySpend, msUntilNextUtcDay, parseBypassAgentIds } from "./budgets.js";
 export { secretService } from "./secrets.js";
 export { routineService } from "./routines.js";
 export { costService } from "./costs.js";

@@ -2045,6 +2045,10 @@ export function agentRoutes(
           adapterType: requestedAdapterType,
           adapterConfig: requestedAdapterConfig,
           runtimeConfig: requestedRuntimeConfig,
+          budgetDailyCents:
+            typeof normalizedHireInput.budgetDailyCents === "number"
+              ? normalizedHireInput.budgetDailyCents
+              : agent.budgetDailyCents,
           budgetMonthlyCents:
             typeof normalizedHireInput.budgetMonthlyCents === "number"
               ? normalizedHireInput.budgetMonthlyCents
@@ -2184,6 +2188,9 @@ export function agentRoutes(
       adapterConfig: normalizedAdapterConfig,
       runtimeConfig: normalizedRuntimeConfig,
       status: "idle",
+      budgetDailyCents: typeof createInput.budgetDailyCents === "number" ? createInput.budgetDailyCents : 0,
+      spentDailyCents: 0,
+      budgetMonthlyCents: typeof createInput.budgetMonthlyCents === "number" ? createInput.budgetMonthlyCents : 0,
       spentMonthlyCents: 0,
       lastHeartbeatAt: null,
     });

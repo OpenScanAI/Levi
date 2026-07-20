@@ -9,6 +9,8 @@ export function buildNewAgentHirePayload(input: {
   selectedSkillKeys?: string[];
   configValues: CreateConfigValues;
   adapterConfig: Record<string, unknown>;
+  budgetDailyCents?: number;
+  budgetMonthlyCents?: number;
 }) {
   const {
     name,
@@ -18,6 +20,8 @@ export function buildNewAgentHirePayload(input: {
     selectedSkillKeys = [],
     configValues,
     adapterConfig,
+    budgetDailyCents = 0,
+    budgetMonthlyCents = 0,
   } = input;
 
   return {
@@ -35,6 +39,7 @@ export function buildNewAgentHirePayload(input: {
       cheapModel: configValues.cheapModel,
       cheapModelEnabled: configValues.cheapModelEnabled,
     }),
-    budgetMonthlyCents: 0,
+    budgetDailyCents,
+    budgetMonthlyCents,
   };
 }

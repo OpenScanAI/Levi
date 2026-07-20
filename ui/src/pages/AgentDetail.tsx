@@ -785,6 +785,33 @@ export function AgentDetail() {
       windowEnd: new Date(),
     } satisfies BudgetPolicySummary;
   }, [agent, budgetOverview?.policies, resolvedCompanyId, routeAgentRef]);
+  const agentDailyBudgetSummary = useMemo(() => {
+    const budgetDailyCents = agent?.budgetDailyCents ?? 0;
+    const spentDailyCents = agent?.spentDailyCents ?? 0;
+    return {
+      policyId: "",
+      companyId: resolvedCompanyId ?? "",
+      scopeType: "agent",
+      scopeId: agent?.id ?? routeAgentRef,
+      scopeName: agent?.name ?? "Agent",
+      metric: "billed_cents",
+      windowKind: "calendar_day_utc",
+      amount: budgetDailyCents,
+      observedAmount: spentDailyCents,
+      remainingAmount: Math.max(0, budgetDailyCents - spentDailyCents),
+      utilizationPercent:
+        budgetDailyCents > 0 ? Number(((spentDailyCents / budgetDailyCents) * 100).toFixed(2)) : 0,
+      warnPercent: 80,
+      hardStopEnabled: true,
+      notifyEnabled: true,
+      isActive: budgetDailyCents > 0,
+      status: budgetDailyCents > 0 && spentDailyCents >= budgetDailyCents ? "hard_stop" : "ok",
+      paused: agent?.status === "paused",
+      pauseReason: agent?.pauseReason ?? null,
+      windowStart: new Date(),
+      windowEnd: new Date(),
+    } satisfies BudgetPolicySummary;
+  }, [agent, resolvedCompanyId, routeAgentRef]);
   const mobileLiveRun = useMemo(
     () => (heartbeats ?? []).find((r) => r.status === "running" || r.status === "queued") ?? null,
     [heartbeats],
@@ -1118,7 +1145,7 @@ export function AgentDetail() {
             onResume={() => agentAction.mutate("resume")}
             disabled={agentAction.isPending || isPendingApproval}
           />
-          <span className="hidden sm:inline"><StatusBadge status={agent.status} /></span>
+          <span className="hidden sm:inline"><StatusBadge status={agent.status} throttleReason={agent.throttleReason} /></span>
           {mobileLiveRun && (
             <Link
               to={`/agents/${canonicalAgentRef}/runs/${mobileLiveRun.id}`}
@@ -1328,7 +1355,11 @@ export function AgentDetail() {
       )}
 
       {activeView === "budget" && resolvedCompanyId ? (
-        <div className="max-w-3xl">
+        <div className="max-w-3xl space-y-4">
+          <BudgetPolicyCard
+            summary={agentDailyBudgetSummary}
+            variant="plain"
+          />
           <BudgetPolicyCard
             summary={agentBudgetSummary}
             isSaving={budgetMutation.isPending}
@@ -1796,20 +1827,22 @@ function ConfigurationTab({
 
   return (
     <div className="space-y-6">
-      <AgentConfigForm
-        mode="edit"
-        agent={agent}
-        onSave={(patch) => updateAgent.mutate(patch)}
-        isSaving={isConfigSaving}
-        adapterModels={adapterModels}
-        onDirtyChange={onDirtyChange}
-        onSaveActionChange={onSaveActionChange}
-        onCancelActionChange={onCancelActionChange}
-        hideInlineSave
-        hidePromptTemplate={hidePromptTemplate}
-        hideInstructionsFile={hideInstructionsFile}
-        sectionLayout="cards"
-      />
+        <AgentConfigForm
+          mode="edit"
+          agent={agent}
+          onSave={(patch) => updateAgent.mutate(patch)}
+          isSaving={isConfigSaving}
+          adapterModels={adapterModels}
+          onDirtyChange={onDirtyChange}
+          onSaveActionChange={onSaveActionChange}
+          onCancelActionChange={onCancelActionChange}
+          hideInlineSave
+          hidePromptTemplate={hidePromptTemplate}
+          hideInstructionsFile={hideInstructionsFile}
+          sectionLayout="cards"
+          budgetDailyCents={agent.budgetDailyCents ?? 0}
+          budgetMonthlyCents={agent.budgetMonthlyCents ?? 0}
+        />
 
       <div>
         <h3 className="text-sm font-medium mb-3">Permissions</h3>

@@ -27,6 +27,7 @@ type DuplicateAgentSource = Pick<
   | "adapterConfig"
   | "runtimeConfig"
   | "defaultEnvironmentId"
+  | "budgetDailyCents"
   | "budgetMonthlyCents"
   | "permissions"
   | "metadata"
@@ -58,6 +59,7 @@ export function buildDuplicateAgentPayload(
     adapterConfig,
     runtimeConfig: cloneRecord(agent.runtimeConfig),
     defaultEnvironmentId: agent.defaultEnvironmentId ?? null,
+    budgetDailyCents: agent.budgetDailyCents ?? 0,
     budgetMonthlyCents: agent.budgetMonthlyCents ?? 0,
     permissions: {
       canCreateAgents: Boolean(agent.permissions?.canCreateAgents),

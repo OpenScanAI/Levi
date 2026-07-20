@@ -36,6 +36,8 @@ import {
   instanceSettingsService,
   reconcileCloudUpstreamRunsOnStartup,
   reconcilePersistedRuntimeServicesOnStartup,
+  resetAgentDailySpend,
+  msUntilNextUtcDay,
   routineService,
 } from "./services/index.js";
 import { createFeedbackTraceShareClientFromConfig } from "./services/feedback-share-client.js";
@@ -288,8 +290,8 @@ export async function startServer(): Promise<StartedServer> {
     }
   }
   
-  let db;
-  let pluginMigrationDb;
+  let db: ReturnType<typeof createDb>;
+  let pluginMigrationDb: ReturnType<typeof createDb>;
   let embeddedPostgres: EmbeddedPostgresInstance | null = null;
   let embeddedPostgresStartedByThisProcess = false;
   let migrationSummary: MigrationSummary = "skipped";
@@ -850,8 +852,34 @@ export async function startServer(): Promise<StartedServer> {
           logger.error({ err }, "periodic sticky-error recovery failed");
         });
     }, config.heartbeatSchedulerIntervalMs);
+
+    // Reset per-agent daily spend counters at the start of each UTC day.
+    // A one-shot timeout aligns the first run to midnight UTC, then an
+    // interval fires every 24 hours to keep counters rolling over.
+    function scheduleDailyBudgetReset() {
+      const delay = msUntilNextUtcDay();
+      setTimeout(() => {
+        void resetAgentDailySpend(db as any)
+          .then((window) => {
+            logger.info({ window }, "reset agent daily spend at UTC day boundary");
+          })
+          .catch((err) => {
+            logger.error({ err }, "failed to reset agent daily spend");
+          });
+        setInterval(() => {
+          void resetAgentDailySpend(db as any)
+            .then((window) => {
+              logger.info({ window }, "reset agent daily spend at UTC day boundary");
+            })
+            .catch((err) => {
+              logger.error({ err }, "failed to reset agent daily spend");
+            });
+        }, 24 * 60 * 60 * 1000);
+      }, delay);
+    }
+    scheduleDailyBudgetReset();
   }
-  
+
   if (config.databaseBackupEnabled) {
     const backupIntervalMs = config.databaseBackupIntervalMinutes * 60 * 1000;
 

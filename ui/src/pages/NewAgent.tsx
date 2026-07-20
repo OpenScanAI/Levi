@@ -68,6 +68,8 @@ export function NewAgent() {
   const [role, setRole] = useState("general");
   const [reportsTo, setReportsTo] = useState<string | null>(null);
   const [configValues, setConfigValues] = useState<CreateConfigValues>(defaultCreateValues);
+  const [budgetDailyCents, setBudgetDailyCents] = useState(0);
+  const [budgetMonthlyCents, setBudgetMonthlyCents] = useState(0);
   const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>([]);
   const [roleOpen, setRoleOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -148,7 +150,7 @@ export function NewAgent() {
       }
     }
     createAgent.mutate(
-      buildNewAgentHirePayload({
+        buildNewAgentHirePayload({
         name,
         effectiveRole,
         title,
@@ -156,6 +158,8 @@ export function NewAgent() {
         selectedSkillKeys,
         configValues,
         adapterConfig: buildAdapterConfig(),
+        budgetDailyCents,
+        budgetMonthlyCents,
       }),
     );
   }
@@ -264,6 +268,12 @@ export function NewAgent() {
           onTestActionChange={handleTestAgentActionChange}
           onTestActionStateChange={handleTestAgentStateChange}
           onTestFeedbackChange={handleTestAgentFeedbackChange}
+          budgetDailyCents={budgetDailyCents}
+          budgetMonthlyCents={budgetMonthlyCents}
+          onBudgetChange={({ budgetDailyCents, budgetMonthlyCents }) => {
+            setBudgetDailyCents(budgetDailyCents ?? 0);
+            setBudgetMonthlyCents(budgetMonthlyCents ?? 0);
+          }}
         />
 
         <div className="border-t border-border px-4 py-4">

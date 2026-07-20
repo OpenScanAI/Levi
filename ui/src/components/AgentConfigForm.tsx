@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { FolderOpen, Heart, ChevronDown, X } from "lucide-react";
-import { asBoolean, asFiniteNumber, asObject, cn } from "../lib/utils";
+import { asBoolean, asFiniteNumber, asObject, cn, centsToDollars, dollarsToCents } from "../lib/utils";
 import { extractModelName, extractProviderId } from "../lib/model-utils";
 import { queryKeys } from "../lib/queryKeys";
 import { useCompany } from "../context/CompanyContext";
@@ -88,6 +88,10 @@ type AgentConfigFormProps = {
   hidePromptTemplate?: boolean;
   /** "cards" renders each section as heading + bordered card (for settings pages). Default: "inline" (border-b dividers). */
   sectionLayout?: "inline" | "cards";
+  /** Current budget values for the agent. In create mode, the parent owns the state and should reflect changes via onBudgetChange. In edit mode, the form tracks changes internally. */
+  budgetDailyCents?: number;
+  budgetMonthlyCents?: number;
+  onBudgetChange?: (patch: { budgetDailyCents?: number; budgetMonthlyCents?: number }) => void;
 } & (
   | {
       mode: "create";
@@ -125,7 +129,8 @@ function isOverlayDirty(o: AgentConfigOverlay): boolean {
     Object.keys(o.adapterConfig).length > 0 ||
     Object.keys(o.heartbeat).length > 0 ||
     Object.keys(o.runtime).length > 0 ||
-    o.modelProfiles?.cheap !== undefined
+    o.modelProfiles?.cheap !== undefined ||
+    (o.budget !== undefined && Object.keys(o.budget).length > 0)
   );
 }
 
@@ -279,6 +284,21 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
     setOverlay((prev) => ({
       ...prev,
       [group]: { ...prev[group], [field]: value },
+    }));
+  }
+
+  /** Read effective budget value: overlay if dirty, else original */
+  function effBudget(field: "budgetDailyCents" | "budgetMonthlyCents", original: number): number {
+    const o = overlay.budget;
+    if (o && field in o) return o[field] as number;
+    return original;
+  }
+
+  /** Mark budget field dirty in overlay */
+  function markBudget(field: "budgetDailyCents" | "budgetMonthlyCents", value: number) {
+    setOverlay((prev) => ({
+      ...prev,
+      budget: { ...(prev.budget ?? {}), [field]: value },
     }));
   }
 
@@ -1193,6 +1213,24 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
               numberHint={help.intervalSec}
               showNumber={val!.heartbeatEnabled}
             />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Daily budget (USD)" hint={help.budgetDailyCents}>
+                <DraftNumberInput
+                  value={centsToDollars(props.budgetDailyCents ?? 0)}
+                  onCommit={(v) => props.onBudgetChange?.({ budgetDailyCents: dollarsToCents(v) })}
+                  immediate
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Monthly budget (USD)" hint={help.budgetMonthlyCents}>
+                <DraftNumberInput
+                  value={centsToDollars(props.budgetMonthlyCents ?? 0)}
+                  onCommit={(v) => props.onBudgetChange?.({ budgetMonthlyCents: dollarsToCents(v) })}
+                  immediate
+                  className={inputClass}
+                />
+              </Field>
+            </div>
           </div>
         </div>
       ) : !isCreate ? (
@@ -1215,6 +1253,24 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                 numberHint={help.intervalSec}
                 showNumber={eff("heartbeat", "enabled", heartbeat.enabled === true)}
               />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Daily budget (USD)" hint={help.budgetDailyCents}>
+                  <DraftNumberInput
+                    value={centsToDollars(effBudget("budgetDailyCents", props.agent.budgetDailyCents ?? 0))}
+                    onCommit={(v) => markBudget("budgetDailyCents", dollarsToCents(v))}
+                    immediate
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Monthly budget (USD)" hint={help.budgetMonthlyCents}>
+                  <DraftNumberInput
+                    value={centsToDollars(effBudget("budgetMonthlyCents", props.agent.budgetMonthlyCents ?? 0))}
+                    onCommit={(v) => markBudget("budgetMonthlyCents", dollarsToCents(v))}
+                    immediate
+                    className={inputClass}
+                  />
+                </Field>
+              </div>
             </div>
             <CollapsibleSection
               title="Advanced Run Policy"

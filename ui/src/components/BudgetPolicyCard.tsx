@@ -19,6 +19,7 @@ function parseDollarInput(value: string) {
 }
 
 function windowLabel(windowKind: BudgetPolicySummary["windowKind"]) {
+  if (windowKind === "calendar_day_utc") return "Daily UTC budget";
   return windowKind === "lifetime" ? "Lifetime budget" : "Monthly UTC budget";
 }
 

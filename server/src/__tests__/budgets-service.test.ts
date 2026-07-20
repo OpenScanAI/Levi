@@ -172,6 +172,18 @@ describe("budgetService", () => {
         pauseReason: null,
         companyId: "company-1",
         name: "Budget Agent",
+        budgetDailyCents: 10000,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 0 }],
+      [{
+        status: "running",
+        pauseReason: null,
+        companyId: "company-1",
+        name: "Budget Agent",
       }],
       [{
         status: "active",
@@ -193,8 +205,142 @@ describe("budgetService", () => {
     });
   });
 
+  it("blocks new work when the agent daily budget exceeds the default 500-cent cap", async () => {
+    const dbStub = createDbStub([
+      [{
+        budgetDailyCents: 0,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 500 }],
+    ]);
+
+    const service = budgetService(dbStub.db as any);
+    const block = await service.getInvocationBlock("company-1", "agent-1");
+
+    expect(block).toEqual(
+      expect.objectContaining({
+        scopeType: "agent",
+        scopeId: "agent-1",
+        code: "BUDGET_EXCEEDED",
+        window: "daily",
+        reason: expect.stringContaining("daily budget exceeded"),
+      }),
+    );
+  });
+
+  it("uses runtimeConfig budgets.dailyCents over the system default", async () => {
+    const dbStub = createDbStub([
+      [{
+        budgetDailyCents: 0,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: { budgets: { dailyCents: 200 } },
+      }],
+      [{ dailyTotal: 200 }],
+    ]);
+
+    const service = budgetService(dbStub.db as any);
+    const block = await service.getInvocationBlock("company-1", "agent-1");
+
+    expect(block).toEqual(
+      expect.objectContaining({
+        code: "BUDGET_EXCEEDED",
+        window: "daily",
+        reason: expect.stringContaining("/ $2.00"),
+      }),
+    );
+  });
+
+  it("uses the agent budgetDailyCents column over the system default", async () => {
+    const dbStub = createDbStub([
+      [{
+        budgetDailyCents: 300,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 300 }],
+    ]);
+
+    const service = budgetService(dbStub.db as any);
+    const block = await service.getInvocationBlock("company-1", "agent-1");
+
+    expect(block).toEqual(
+      expect.objectContaining({
+        code: "BUDGET_EXCEEDED",
+        window: "daily",
+        reason: expect.stringContaining("/ $3.00"),
+      }),
+    );
+  });
+
+  it("blocks new work when the agent monthly budget is exceeded", async () => {
+    const dbStub = createDbStub([
+      [{
+        budgetDailyCents: 0,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 1000,
+        spentMonthlyCents: 1000,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 0 }],
+    ]);
+
+    const service = budgetService(dbStub.db as any);
+    const block = await service.getInvocationBlock("company-1", "agent-1");
+
+    expect(block).toEqual(
+      expect.objectContaining({
+        code: "BUDGET_EXCEEDED",
+        window: "monthly",
+        reason: expect.stringContaining("monthly budget exceeded"),
+      }),
+    );
+  });
+
+  it("halves the daily cap when the recovery model profile is used", async () => {
+    const dbStub = createDbStub([
+      [{
+        budgetDailyCents: 0,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 250 }],
+    ]);
+
+    const service = budgetService(dbStub.db as any);
+    const block = await service.getInvocationBlock("company-1", "agent-1", { modelProfile: "cheap" });
+
+    expect(block).toEqual(
+      expect.objectContaining({
+        code: "BUDGET_EXCEEDED",
+        window: "daily",
+        reason: expect.stringContaining("/ $2.50"),
+      }),
+    );
+  });
+
   it("surfaces a budget-owned company pause distinctly from a manual pause", async () => {
     const dbStub = createDbStub([
+      [{
+        status: "idle",
+        pauseReason: null,
+        companyId: "company-1",
+        name: "Budget Agent",
+        budgetDailyCents: 10000,
+        spentDailyCents: 0,
+        budgetMonthlyCents: 0,
+        spentMonthlyCents: 0,
+        runtimeConfig: {},
+      }],
+      [{ dailyTotal: 0 }],
       [{
         status: "idle",
         pauseReason: null,

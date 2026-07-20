@@ -229,9 +229,17 @@ export function agentService(db: Db) {
   }
 
   function normalizeAgentRow(row: typeof agents.$inferSelect) {
+    const effectiveDailyCap = row.budgetDailyCents > 0 ? row.budgetDailyCents : Number(process.env.LEVI_DEFAULT_AGENT_DAILY_BUDGET_CENTS ?? 500);
+    const effectiveMonthlyCap = row.budgetMonthlyCents > 0 ? row.budgetMonthlyCents : 0;
+    const budgetExceeded =
+      (effectiveDailyCap > 0 && row.spentDailyCents >= effectiveDailyCap) ||
+      (effectiveMonthlyCap > 0 && row.spentMonthlyCents >= effectiveMonthlyCap);
+    const throttleReason: "BUDGET_EXCEEDED" | "NO_CONTEXT" | null =
+      budgetExceeded ? "BUDGET_EXCEEDED" : row.throttleReason === "NO_CONTEXT" ? "NO_CONTEXT" : null;
     return withUrlKey({
       ...row,
       permissions: normalizeAgentPermissions(row.permissions, row.role),
+      throttleReason,
     });
   }
 
@@ -256,14 +264,41 @@ export function agentService(db: Db) {
     return new Map(rows.map((row) => [row.agentId, Number(row.spentMonthlyCents ?? 0)]));
   }
 
-  async function hydrateAgentSpend<T extends { id: string; companyId: string; spentMonthlyCents: number }>(rows: T[]) {
+  async function getDailySpendByAgentIds(companyId: string, agentIds: string[]) {
+    if (agentIds.length === 0) return new Map<string, number>();
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+    const rows = await db
+      .select({
+        agentId: costEvents.agentId,
+        spentDailyCents: sql<number>`coalesce(sum(${costEvents.costCents}), 0)::double precision`,
+      })
+      .from(costEvents)
+      .where(
+        and(
+          eq(costEvents.companyId, companyId),
+          inArray(costEvents.agentId, agentIds),
+          gte(costEvents.occurredAt, start),
+          lt(costEvents.occurredAt, end),
+        ),
+      )
+      .groupBy(costEvents.agentId);
+    return new Map(rows.map((row) => [row.agentId, Number(row.spentDailyCents ?? 0)]));
+  }
+
+  async function hydrateAgentSpend<T extends { id: string; companyId: string; spentMonthlyCents: number; spentDailyCents: number }>(rows: T[]) {
     const agentIds = rows.map((row) => row.id);
     const companyId = rows[0]?.companyId;
     if (!companyId || agentIds.length === 0) return rows;
-    const spendByAgentId = await getMonthlySpendByAgentIds(companyId, agentIds);
+    const [monthlySpendByAgentId, dailySpendByAgentId] = await Promise.all([
+      getMonthlySpendByAgentIds(companyId, agentIds),
+      getDailySpendByAgentIds(companyId, agentIds),
+    ]);
     return rows.map((row) => ({
       ...row,
-      spentMonthlyCents: spendByAgentId.get(row.id) ?? 0,
+      spentMonthlyCents: monthlySpendByAgentId.get(row.id) ?? 0,
+      spentDailyCents: dailySpendByAgentId.get(row.id) ?? 0,
     }));
   }
 

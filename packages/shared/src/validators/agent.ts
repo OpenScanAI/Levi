@@ -76,6 +76,7 @@ export const createAgentSchema = z.object({
   instructionsBundle: createAgentInstructionsBundleSchema.optional(),
   runtimeConfig: agentRuntimeConfigSchema.optional().default({}),
   defaultEnvironmentId: z.string().uuid().optional().nullable(),
+  budgetDailyCents: z.number().int().nonnegative().optional().default(0),
   budgetMonthlyCents: z.number().int().nonnegative().optional().default(0),
   permissions: agentPermissionsSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
@@ -98,7 +99,9 @@ export const updateAgentSchema = createAgentSchema
     replaceAdapterConfig: z.boolean().optional(),
     status: z.enum(AGENT_STATUSES).optional(),
     spentMonthlyCents: z.number().int().nonnegative().optional(),
+    budgetDailyCents: z.number().int().nonnegative().optional(),
   });
+
 
 export type UpdateAgent = z.infer<typeof updateAgentSchema>;
 

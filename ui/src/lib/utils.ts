@@ -25,6 +25,14 @@ export function formatCents(cents: number): string {
   return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+export function centsToDollars(cents: number): number {
+  return Math.round((cents / 100) * 100) / 100;
+}
+
+export function dollarsToCents(dollars: number): number {
+  return Math.round(dollars * 100);
+}
+
 export function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
